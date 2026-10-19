@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Substitui o espaço vertical que o Readium põe em volta de cada página (40dp). Sem ele,
+        o WebView ocupa a tela toda e as ilustrações podem ir de borda a borda; a margem do
+        texto é recriada em CSS (veja IllustrationTransformer).
+    -->
+    <dimen name="readium_navigator_epub_vertical_padding">0dp</dimen>
+</resources>

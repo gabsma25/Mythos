@@ -3,6 +3,7 @@ package com.mythos.reader.reader.epub
 import android.content.Context
 import java.io.File
 import java.io.IOException
+import org.readium.r2.shared.publication.Layout
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.getOrElse
@@ -33,7 +34,17 @@ class Readium(context: Context) {
         val asset = assetRetriever.retrieve(file.toUrl(isDirectory = false))
             .getOrElse { return Result.failure(IOException(it.message)) }
 
-        val publication = publicationOpener.open(asset, allowUserInteraction = false)
+        val publication = publicationOpener
+            .open(
+                asset,
+                allowUserInteraction = false,
+                onCreatePublication = {
+                    // Fixed-layout (mangás, álbuns) não pagina em colunas; fica como o autor fez.
+                    if (manifest.metadata.layout != Layout.FIXED) {
+                        container = container.withFullBleedIllustrations()
+                    }
+                },
+            )
             .getOrElse {
                 asset.close()
                 return Result.failure(IOException(it.message))

@@ -64,6 +64,9 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
             initialLocator = session.lastLocator,
             initialPreferences = viewModel.preferences.value.toEpubPreferences(),
             listener = this,
+            // A área da câmera é respeitada em CSS (env(safe-area-inset-top)), para que só o
+            // texto desvie dela e as ilustrações possam ocupar a tela inteira.
+            configuration = EpubNavigatorFragment.Configuration(shouldApplyInsetsPadding = false),
         )
         super.onCreate(savedInstanceState)
 
