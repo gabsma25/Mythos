@@ -22,6 +22,18 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!--
+            Recebe o que vem de outros apps e repassa à biblioteca na tarefa do Mythos,
+            para nunca existir uma segunda cópia do app dentro da tarefa de outro app.
+        -->
+        <activity
+            android:name=".ExternalEntryActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
 
             <!-- Abrir um EPUB a partir do gerenciador de arquivos -->
             <intent-filter>

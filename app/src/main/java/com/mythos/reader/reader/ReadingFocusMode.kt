@@ -10,7 +10,7 @@ import android.os.Build
 import android.provider.Settings
 import android.service.notification.Condition
 import android.service.notification.ZenPolicy
-import com.mythos.reader.MainActivity
+import com.mythos.reader.ExternalEntryActivity
 import com.mythos.reader.R
 
 /**
@@ -74,7 +74,8 @@ class ReadingFocusMode(private val context: Context) {
             .build()
 
         return AutomaticZenRule.Builder(RULE_NAME, conditionId)
-            .setConfigurationActivity(ComponentName(context, MainActivity::class.java))
+            // Pela porta de entrada, para não abrir a biblioteca dentro da tarefa de Configurações.
+            .setConfigurationActivity(ComponentName(context, ExternalEntryActivity::class.java))
             .setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
             .setZenPolicy(policy)
             .setManualInvocationAllowed(false)
@@ -102,8 +103,8 @@ class ReadingFocusMode(private val context: Context) {
     private companion object {
         const val KEY_RULE_ID = "ruleId"
         const val KEY_POLICY_VERSION = "policyVersion"
-        /** Incrementar sempre que [buildRule] mudar. 2: mídia liberada. */
-        const val POLICY_VERSION = 2
+        /** Incrementar sempre que [buildRule] mudar. 2: mídia liberada. 3: porta de entrada. */
+        const val POLICY_VERSION = 3
         const val RULE_NAME = "Leitura Mythos"
     }
 }
