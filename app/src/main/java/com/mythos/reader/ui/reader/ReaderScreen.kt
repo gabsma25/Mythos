@@ -49,6 +49,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.fragment.compose.AndroidFragment
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mythos.reader.appContainer
@@ -160,6 +165,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     when (sheet) {
         ReaderSheet.NONE -> Unit
         ReaderSheet.SETTINGS -> ModalBottomSheet(onDismissRequest = { sheet = ReaderSheet.NONE }) {
+            KeepSystemBarsHidden()
             ReaderSettings(
                 preferences = preferences,
                 onChange = viewModel::updatePreferences,
@@ -168,6 +174,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
             )
         }
         ReaderSheet.CONTENTS -> ModalBottomSheet(onDismissRequest = { sheet = ReaderSheet.NONE }) {
+            KeepSystemBarsHidden()
             TableOfContents(
                 links = remember(publication) { publication.tableOfContents.flatten() },
                 onSelect = { link ->
@@ -177,6 +184,24 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 },
             )
         }
+    }
+}
+
+/**
+ * O ModalBottomSheet abre numa janela própria (um diálogo), que não herda o modo imersivo do
+ * leitor: sem isto, a barra de status (hora, bateria, sinal) aparece enquanto o painel está aberto.
+ */
+@Composable
+private fun KeepSystemBarsHidden() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        (view.parent as? DialogWindowProvider)?.window?.let { window ->
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+        onDispose { }
     }
 }
 
