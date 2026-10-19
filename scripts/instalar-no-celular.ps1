@@ -1,7 +1,8 @@
 ﻿# Compila o app, instala no celular conectado por USB e copia livros para Download/Mythos.
-# Uso: .\scripts\instalar-no-celular.ps1 [-Livros "C:\caminho\da\pasta"]
+# Uso: .\scripts\instalar-no-celular.ps1 [-Livros "C:\caminho\da\pasta"] [-Emulador]
 param(
-    [string]$Livros = "$env:USERPROFILE\Documentos\livros-mythos"
+    [string]$Livros = "$env:USERPROFILE\Documentos\livros-mythos",
+    [switch]$Emulador
 )
 
 $ErrorActionPreference = "Stop"
@@ -18,8 +19,20 @@ if (-not $seriais) {
     Write-Host "Nenhum celular conectado. Ative a depuração USB e autorize este computador no aviso do celular." -ForegroundColor Yellow
     exit 1
 }
-# Com emulador e celular conectados ao mesmo tempo, prefere o aparelho físico.
-$serial = @($seriais | Where-Object { $_ -notlike "emulator-*" }) + @($seriais) | Select-Object -First 1
+# Instala no aparelho físico. O emulador só é usado com -Emulador, para que um
+# celular desconectado não faça a instalação ir parar no emulador sem aviso.
+$fisicos = @($seriais | Where-Object { $_ -notlike "emulator-*" })
+$emuladores = @($seriais | Where-Object { $_ -like "emulator-*" })
+if ($Emulador) {
+    if (-not $emuladores) { Write-Host "Nenhum emulador aberto." -ForegroundColor Yellow; exit 1 }
+    $serial = $emuladores[0]
+} elseif ($fisicos) {
+    $serial = $fisicos[0]
+} else {
+    Write-Host "Só o emulador está conectado; o celular não aparece para o adb." -ForegroundColor Yellow
+    Write-Host "Verifique a Depuração USB e o Bloqueador automático, ou use -Emulador para instalar no emulador." -ForegroundColor Yellow
+    exit 1
+}
 $env:ANDROID_SERIAL = $serial
 Write-Host "Dispositivo: $serial ($(& $adb shell getprop ro.product.model))" -ForegroundColor Cyan
 
