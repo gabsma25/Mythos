@@ -26,17 +26,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -58,6 +64,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mythos.reader.data.importer.LibraryFolder
 import com.mythos.reader.model.Book
 import com.mythos.reader.model.ReadingStatus
 import kotlinx.coroutines.Dispatchers
@@ -73,11 +80,23 @@ fun LibraryScreen(
     onOpen: (Book) -> Unit,
     onToggleFavorite: (Book) -> Unit,
     onDelete: (Book) -> Unit,
+    onAddFolder: () -> Unit,
+    onRemoveFolder: (LibraryFolder) -> Unit,
 ) {
     var pendingDelete by remember { mutableStateOf<Book?>(null) }
+    var foldersOpen by remember { mutableStateOf(false) }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Minha biblioteca") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Minha biblioteca") },
+                actions = {
+                    IconButton(onClick = { foldersOpen = true }) {
+                        Icon(Icons.Outlined.Folder, contentDescription = "Pastas da biblioteca")
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onImport,
@@ -126,6 +145,60 @@ fun LibraryScreen(
                 TextButton(onClick = { onDelete(book); pendingDelete = null }) { Text("Remover") }
             },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancelar") } },
+        )
+    }
+
+    if (foldersOpen) {
+        ModalBottomSheet(onDismissRequest = { foldersOpen = false }) {
+            FoldersSheet(folders = state.folders, onAdd = onAddFolder, onRemove = onRemoveFolder)
+        }
+    }
+}
+
+@Composable
+private fun FoldersSheet(
+    folders: List<LibraryFolder>,
+    onAdd: () -> Unit,
+    onRemove: (LibraryFolder) -> Unit,
+) {
+    Column(Modifier.padding(start = 24.dp, end = 24.dp, bottom = 32.dp)) {
+        Text("Pastas da biblioteca", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Os EPUBs dessas pastas (e subpastas) entram na biblioteca automaticamente sempre que você abre o app.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
+
+        folders.forEach { folder ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text(folder.name, Modifier.weight(1f).padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyLarge)
+                IconButton(onClick = { onRemove(folder) }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Parar de acompanhar ${folder.name}")
+                }
+            }
+        }
+        if (folders.isNotEmpty()) {
+            Text(
+                "Parar de acompanhar uma pasta não remove os livros já importados.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+        FilledTonalButton(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.CreateNewFolder, contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text("Adicionar pasta")
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "O Android não deixa escolher a pasta Download inteira. Use uma subpasta, como Download/Livros, ou o botão Importar.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -252,7 +325,7 @@ private fun EmptyLibrary(filter: LibraryFilter) {
         if (filter == LibraryFilter.ALL) {
             Spacer(Modifier.height(4.dp))
             Text(
-                "Toque em Importar para adicionar arquivos EPUB.",
+                "Toque em Importar para escolher arquivos EPUB, ou no ícone de pasta para acompanhar uma pasta do aparelho.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

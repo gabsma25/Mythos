@@ -15,6 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.core.content.IntentCompat
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -45,6 +46,15 @@ class MainActivity : AppCompatActivity() {
                 val picker = rememberLauncherForActivityResult(
                     ActivityResultContracts.OpenMultipleDocuments(),
                 ) { uris -> viewModel.import(uris) }
+                val folderPicker = rememberLauncherForActivityResult(
+                    ActivityResultContracts.OpenDocumentTree(),
+                ) { uri -> viewModel.addFolder(uri) }
+
+                // Ao voltar para a biblioteca (de outro app ou do leitor), procura EPUBs novos nas pastas.
+                LifecycleStartEffect(Unit) {
+                    viewModel.syncFolders()
+                    onStopOrDispose { }
+                }
 
                 LaunchedEffect(Unit) {
                     viewModel.events.collect { event ->
@@ -64,6 +74,8 @@ class MainActivity : AppCompatActivity() {
                     onOpen = { viewModel.open(it) },
                     onToggleFavorite = viewModel::toggleFavorite,
                     onDelete = viewModel::delete,
+                    onAddFolder = { folderPicker.launch(null) },
+                    onRemoveFolder = viewModel::removeFolder,
                 )
             }
         }

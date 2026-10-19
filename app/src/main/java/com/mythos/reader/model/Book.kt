@@ -1,11 +1,12 @@
 package com.mythos.reader.model
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 enum class BookFormat { EPUB }
 
-@Entity(tableName = "books")
+@Entity(tableName = "books", indices = [Index("contentHash"), Index("sourceUri")])
 data class Book(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
@@ -24,6 +25,10 @@ data class Book(
      */
     val locatorJson: String? = null,
     val favorite: Boolean = false,
+    /** SHA-256 do arquivo; impede importar o mesmo livro duas vezes, venha de onde vier. */
+    val contentHash: String? = null,
+    /** Documento de origem quando o livro veio de uma pasta sincronizada. */
+    val sourceUri: String? = null,
 ) {
     val status: ReadingStatus
         get() = when {

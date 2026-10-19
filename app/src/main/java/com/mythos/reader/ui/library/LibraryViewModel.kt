@@ -4,8 +4,11 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mythos.reader.AppContainer
+import com.mythos.reader.data.importer.ImportResult
+import com.mythos.reader.data.importer.LibraryFolder
 import com.mythos.reader.model.Book
 import com.mythos.reader.model.ReadingStatus
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,6 +38,7 @@ enum class LibraryFilter(val label: String) {
 data class LibraryUiState(
     val books: List<Book> = emptyList(),
     val filter: LibraryFilter = LibraryFilter.ALL,
+    val folders: List<LibraryFolder> = emptyList(),
     val isLoaded: Boolean = false,
     val busyMessage: String? = null,
 )
@@ -47,17 +51,20 @@ sealed interface LibraryEvent {
 class LibraryViewModel(private val container: AppContainer) : ViewModel() {
 
     private val repository = container.bookRepository
+    private val folders = container.libraryFolders
     private val filter = MutableStateFlow(LibraryFilter.ALL)
     private val busyMessage = MutableStateFlow<String?>(null)
+    private var syncJob: Job? = null
 
     private val _events = Channel<LibraryEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
     val uiState: StateFlow<LibraryUiState> =
-        combine(repository.books, filter, busyMessage) { books, filter, busy ->
+        combine(repository.books, filter, folders.folders, busyMessage) { books, filter, folders, busy ->
             LibraryUiState(
                 books = books.filter(filter::matches),
                 filter = filter,
+                folders = folders,
                 isLoaded = true,
                 busyMessage = busy,
             )
@@ -69,17 +76,32 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
         if (uris.isEmpty()) return
         viewModelScope.launch {
             busyMessage.value = if (uris.size == 1) "Importando…" else "Importando ${uris.size} livros…"
-            val failures = uris.map { repository.import(it) }.filter { it.isFailure }
+            val results = uris.map { repository.import(it) }
             busyMessage.value = null
-            when {
-                failures.isEmpty() && uris.size > 1 -> _events.send(LibraryEvent.Message("${uris.size} livros importados."))
-                failures.size == 1 -> _events.send(
-                    LibraryEvent.Message(failures.first().exceptionOrNull()?.message ?: "Falha na importação."),
-                )
-                failures.size > 1 -> _events.send(LibraryEvent.Message("${failures.size} arquivos não puderam ser importados."))
-            }
+            summarize(results, fromFolders = false)?.let { _events.send(LibraryEvent.Message(it)) }
         }
     }
+
+    /** Procura EPUBs novos nas pastas acompanhadas. Chamado sempre que a biblioteca volta à tela. */
+    fun syncFolders() {
+        if (folders.folders.value.isEmpty() || syncJob?.isActive == true) return
+        syncJob = viewModelScope.launch {
+            val results = repository.syncFolders()
+            summarize(results, fromFolders = true)?.let { _events.send(LibraryEvent.Message(it)) }
+        }
+    }
+
+    fun addFolder(treeUri: Uri?) {
+        treeUri ?: return
+        runCatching { folders.add(treeUri) }
+            .onFailure {
+                viewModelScope.launch { _events.send(LibraryEvent.Message("Não foi possível acessar essa pasta.")) }
+                return
+            }
+        syncFolders()
+    }
+
+    fun removeFolder(folder: LibraryFolder) = folders.remove(folder)
 
     fun open(book: Book) = open(book.id)
 
@@ -100,4 +122,31 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     fun delete(book: Book) {
         viewModelScope.launch { repository.delete(book) }
     }
+
+    /** Uma mensagem curta com o resultado; nada é dito quando a sincronização não encontra novidades. */
+    private fun summarize(results: List<ImportResult>, fromFolders: Boolean): String? {
+        val imported = results.filterIsInstance<ImportResult.Imported>()
+        val duplicates = results.filterIsInstance<ImportResult.Duplicate>()
+        val failures = results.filterIsInstance<ImportResult.Failed>()
+
+        if (results.size == 1 && !fromFolders) {
+            return when (val result = results.single()) {
+                is ImportResult.Imported -> null
+                is ImportResult.Duplicate -> "“${result.existing.title}” já está na biblioteca."
+                is ImportResult.Failed -> result.message
+            }
+        }
+
+        val parts = buildList {
+            if (imported.isNotEmpty()) add(plural(imported.size, "livro novo", "livros novos"))
+            if (duplicates.isNotEmpty() && !fromFolders) {
+                add(plural(duplicates.size, "já estava na biblioteca", "já estavam na biblioteca"))
+            }
+            if (failures.isNotEmpty()) add(plural(failures.size, "arquivo com erro", "arquivos com erro"))
+        }
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+    }
+
+    private fun plural(count: Int, singular: String, plural: String) =
+        "$count ${if (count == 1) singular else plural}"
 }
