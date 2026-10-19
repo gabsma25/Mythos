@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Livro aberto, centralizado na área segura (66dp) do ícone adaptativo. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#F4ECD8"
+        android:pathData="M54,38 C46,33 37,32 30,33 L30,72 C37,71 46,72 54,77 Z" />
+    <path
+        android:fillColor="#E6D9B8"
+        android:pathData="M54,38 C62,33 71,32 78,33 L78,72 C71,71 62,72 54,77 Z" />
+</vector>
