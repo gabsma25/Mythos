@@ -20,8 +20,14 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            // R8 remove código não usado (ex.: milhares de ícones, ExoPlayer do Readium),
+            // o que reduz bastante a memória ocupada pelo código mapeado do APK.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Uso pessoal: assina com a chave de debug deste PC, permitindo instalar por cima
+            // da versão de debug sem perder a biblioteca.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
