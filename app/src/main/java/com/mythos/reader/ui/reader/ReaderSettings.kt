@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +28,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -58,6 +60,8 @@ private val TextPalette = listOf(
 fun ReaderSettings(
     preferences: ReaderPreferences,
     onChange: ((ReaderPreferences) -> ReaderPreferences) -> Unit,
+    focusPermissionGranted: Boolean,
+    onRequestFocusPermission: () -> Unit,
 ) {
     Column(
         Modifier
@@ -155,6 +159,37 @@ fun ReaderSettings(
                 checked = preferences.animatedPageTurns,
                 onCheckedChange = { checked -> onChange { it.copy(animatedPageTurns = checked) } },
             )
+        }
+
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Não perturbe durante a leitura", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                Switch(
+                    checked = preferences.doNotDisturb,
+                    onCheckedChange = { checked ->
+                        onChange { it.copy(doNotDisturb = checked) }
+                        if (checked && !focusPermissionGranted) onRequestFocusPermission()
+                    },
+                )
+            }
+            if (preferences.doNotDisturb && !focusPermissionGranted) {
+                Text(
+                    "Falta permitir o acesso ao Não perturbe para o Mythos.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                TextButton(onClick = onRequestFocusPermission, contentPadding = PaddingValues(0.dp)) {
+                    Text("Abrir configurações")
+                }
+            } else {
+                Text(
+                    "Silencia notificações, sons e vibração enquanto um livro estiver aberto. " +
+                        "Alarmes e chamadas repetidas continuam tocando. Ajuste as exceções em " +
+                        "Configurações › Modos › Leitura Mythos.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

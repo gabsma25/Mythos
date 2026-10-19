@@ -48,7 +48,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.fragment.compose.AndroidFragment
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mythos.reader.appContainer
 import com.mythos.reader.reader.epub.toEpubPreferences
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
@@ -71,6 +74,15 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     var controlsVisible by rememberSaveable { mutableStateOf(false) }
     var sheet by rememberSaveable { mutableStateOf(ReaderSheet.NONE) }
+
+    // A permissão é concedida fora do app; relê ao voltar das configurações.
+    val context = LocalContext.current
+    val focusMode = context.appContainer.readingFocusMode
+    var focusPermissionGranted by remember { mutableStateOf(focusMode.hasPermission) }
+    LifecycleResumeEffect(Unit) {
+        focusPermissionGranted = focusMode.hasPermission
+        onPauseOrDispose { }
+    }
 
     val locator: Locator? by produceState(viewModel.session.lastLocator, navigator) {
         navigator?.currentLocator?.collect { value = it }
@@ -148,7 +160,12 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     when (sheet) {
         ReaderSheet.NONE -> Unit
         ReaderSheet.SETTINGS -> ModalBottomSheet(onDismissRequest = { sheet = ReaderSheet.NONE }) {
-            ReaderSettings(preferences = preferences, onChange = viewModel::updatePreferences)
+            ReaderSettings(
+                preferences = preferences,
+                onChange = viewModel::updatePreferences,
+                focusPermissionGranted = focusPermissionGranted,
+                onRequestFocusPermission = { context.startActivity(focusMode.permissionIntent()) },
+            )
         }
         ReaderSheet.CONTENTS -> ModalBottomSheet(onDismissRequest = { sheet = ReaderSheet.NONE }) {
             TableOfContents(

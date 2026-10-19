@@ -19,6 +19,8 @@ data class ReaderPreferences(
     val customText: Int = 0xFF2B2B2B.toInt(),
     val columns: ReaderColumns = ReaderColumns.AUTO,
     val animatedPageTurns: Boolean = true,
+    /** Liga o modo "Leitura Mythos" (Não Perturbe) enquanto um livro estiver aberto. */
+    val doNotDisturb: Boolean = false,
 ) {
     val backgroundColor: Int get() = if (theme == ReaderTheme.CUSTOM) customBackground else theme.background
     val textColor: Int get() = if (theme == ReaderTheme.CUSTOM) customText else theme.text

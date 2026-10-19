@@ -18,6 +18,12 @@ import com.mythos.reader.appContainer
 import com.mythos.reader.reader.epub.EpubSession
 import com.mythos.reader.reader.epub.toEpubPreferences
 import com.mythos.reader.ui.theme.MythosTheme
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -62,10 +68,32 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
         super.onCreate(savedInstanceState)
 
         enterImmersiveMode()
+        followFocusModePreference()
 
         setContent {
             MythosTheme {
                 ReaderScreen(viewModel = viewModel, onBack = ::finish)
+            }
+        }
+    }
+
+    /**
+     * Liga o modo "Leitura Mythos" só enquanto o leitor está visível. Sair do app, trocar de
+     * app ou abrir as configurações desliga o modo; voltar religa (e já pega uma permissão
+     * recém-concedida).
+     */
+    private fun followFocusModePreference() {
+        val focusMode = appContainer.readingFocusMode
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                try {
+                    viewModel.preferences
+                        .map { it.doNotDisturb }
+                        .distinctUntilChanged()
+                        .collect { enabled -> if (enabled) focusMode.activate() else focusMode.deactivate() }
+                } finally {
+                    focusMode.deactivate()
+                }
             }
         }
     }

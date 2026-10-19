@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ícone do modo "Leitura Mythos" em Configurações › Modos. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,6.5C10.2,5.3 7.6,4.8 4,5L4,18C7.6,17.8 10.2,18.3 12,19.5ZM12,6.5C13.8,5.3 16.4,4.8 20,5L20,18C16.4,17.8 13.8,18.3 12,19.5Z" />
+</vector>

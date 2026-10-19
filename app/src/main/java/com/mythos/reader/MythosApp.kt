@@ -7,6 +7,7 @@ import com.mythos.reader.data.importer.BookImporter
 import com.mythos.reader.data.importer.LibraryFolders
 import com.mythos.reader.data.preferences.ReaderPreferencesRepository
 import com.mythos.reader.data.repository.BookRepository
+import com.mythos.reader.reader.ReadingFocusMode
 import com.mythos.reader.reader.epub.EpubSessionStore
 import com.mythos.reader.reader.epub.Readium
 import kotlinx.coroutines.CoroutineScope
@@ -21,6 +22,16 @@ class MythosApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // Se o processo foi encerrado com um livro aberto, o modo de leitura ficaria ligado
+        // sem ninguém para desligá-lo. O leitor o religa ao voltar à tela, se for o caso.
+        container.readingFocusMode.deactivate()
+
+        // Um travamento com o livro aberto também deixaria o celular silenciado.
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching { container.readingFocusMode.deactivate() }
+            previousHandler?.uncaughtException(thread, error)
+        }
     }
 }
 
@@ -39,6 +50,7 @@ class AppContainer(context: Context) {
         folders = libraryFolders,
     )
     val readerPreferences = ReaderPreferencesRepository(context)
+    val readingFocusMode = ReadingFocusMode(context)
     val epubSessions = EpubSessionStore(readium, bookRepository)
 
     init {
