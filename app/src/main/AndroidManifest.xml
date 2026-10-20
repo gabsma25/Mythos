@@ -43,6 +43,19 @@
                 <data android:mimeType="application/epub+zip" />
             </intent-filter>
 
+            <!--
+                Abrir TXT/HTML pelo gerenciador de arquivos (convertidos em livro). Só VIEW:
+                aceitar SEND de text/plain colocaria o app no compartilhar de qualquer mensagem.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/html" />
+                <data android:mimeType="application/xhtml+xml" />
+            </intent-filter>
+
             <!-- Compartilhar um EPUB com o aplicativo -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

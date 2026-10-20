@@ -81,6 +81,10 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    // Limpa HTML de páginas salvas ao converter em EPUB (já vem com o Readium; declarado por uso direto).
+    implementation(libs.jsoup)
+
+    testImplementation(libs.junit)
 
     implementation(libs.readium.shared)
     implementation(libs.readium.streamer)

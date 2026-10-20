@@ -325,7 +325,7 @@ private fun EmptyLibrary(filter: LibraryFilter) {
         if (filter == LibraryFilter.ALL) {
             Spacer(Modifier.height(4.dp))
             Text(
-                "Toque em Importar para escolher arquivos EPUB, ou no ícone de pasta para acompanhar uma pasta do aparelho.",
+                "Toque em Importar para escolher arquivos EPUB, TXT ou HTML, ou no ícone de pasta para acompanhar uma pasta do aparelho.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -75,8 +75,14 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     fun import(uris: List<Uri>) {
         if (uris.isEmpty()) return
         viewModelScope.launch {
-            busyMessage.value = if (uris.size == 1) "Importando…" else "Importando ${uris.size} livros…"
-            val results = uris.map { repository.import(it) }
+            val (texts, books) = uris.partition(repository::isTextDocument)
+            busyMessage.value = when {
+                books.isEmpty() -> "Convertendo texto em livro…"
+                uris.size == 1 -> "Importando…"
+                else -> "Importando ${uris.size} arquivos…"
+            }
+            val results = books.map { repository.import(it) } +
+                listOfNotNull(texts.takeIf { it.isNotEmpty() }?.let { repository.importText(it) })
             busyMessage.value = null
             summarize(results, fromFolders = false)?.let { _events.send(LibraryEvent.Message(it)) }
         }

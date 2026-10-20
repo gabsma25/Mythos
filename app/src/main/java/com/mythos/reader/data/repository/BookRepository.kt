@@ -20,6 +20,11 @@ class BookRepository(
 
     suspend fun import(uri: Uri): ImportResult = importer.import(uri)
 
+    fun isTextDocument(uri: Uri): Boolean = importer.isTextDocument(uri)
+
+    /** Vários TXT/HTML escolhidos juntos viram um único livro, com um capítulo por arquivo. */
+    suspend fun importText(uris: List<Uri>): ImportResult = importer.importText(uris)
+
     /**
      * Importa os EPUBs novos das pastas acompanhadas. Arquivos já importados (ou removidos
      * da biblioteca de propósito) são pulados sem serem lidos, então a varredura é rápida.

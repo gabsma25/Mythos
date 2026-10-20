@@ -63,6 +63,58 @@ class BookImporter(
             return ImportResult.Failed("Não foi possível ler “$displayName”.")
         }
 
+        return finishImport(file, fileId, hash, displayName, sourceUri)
+    }
+
+    /** TXT e HTML são reconhecidos pelo tipo informado pelo Android ou pela extensão. */
+    fun isTextDocument(uri: Uri): Boolean {
+        val type = runCatching { context.contentResolver.getType(uri) }.getOrNull()
+        val extension = displayName(uri)?.substringAfterLast('.', "")?.lowercase()
+        return type in TEXT_TYPES || extension in TEXT_EXTENSIONS
+    }
+
+    /**
+     * Converte um ou vários TXT/HTML em um único livro EPUB (um capítulo por arquivo) e o importa
+     * como qualquer outro. O EPUB gerado é determinístico, então importar o mesmo texto de novo é
+     * reconhecido como duplicata.
+     */
+    suspend fun importText(uris: List<Uri>): ImportResult = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            val sources = uris.map { uri ->
+                val name = displayName(uri) ?: "texto.txt"
+                val bytes = runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        val data = input.readBytes()
+                        if (data.size > MAX_TEXT_BYTES) {
+                            return@withLock ImportResult.Failed("“$name” é grande demais para converter.")
+                        }
+                        data
+                    }
+                }.getOrNull() ?: return@withLock ImportResult.Failed("Não foi possível ler “$name”.")
+                TextSource(name, bytes)
+            }
+
+            val fileId = UUID.randomUUID().toString()
+            val file = File(booksDir, "$fileId.epub")
+            val title = try {
+                TextToEpub.convert(sources, file)
+            } catch (e: Exception) {
+                file.delete()
+                return@withLock ImportResult.Failed("Não foi possível converter o texto em livro.")
+            }
+            val hash = file.inputStream().use(::hashOf)
+            finishImport(file, fileId, hash, "$title.epub", sourceUri = null)
+        }
+    }
+
+    /** Etapa comum a EPUBs e textos convertidos: duplicata, metadados, capa e registro. */
+    private suspend fun finishImport(
+        file: File,
+        fileId: String,
+        hash: String,
+        displayName: String,
+        sourceUri: String?,
+    ): ImportResult {
         bookDao.findByHash(hash)?.let { existing ->
             file.delete()
             // Lembra a origem para que a próxima sincronização não releia este arquivo.
@@ -159,5 +211,8 @@ class BookImporter(
     private companion object {
         const val COVER_WIDTH = 480
         const val COVER_HEIGHT = 720
+        const val MAX_TEXT_BYTES = 50 * 1024 * 1024
+        val TEXT_TYPES = setOf("text/plain", "text/html", "application/xhtml+xml")
+        val TEXT_EXTENSIONS = setOf("txt", "html", "htm", "xhtml")
     }
 }

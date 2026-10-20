@@ -70,7 +70,17 @@ class MainActivity : AppCompatActivity() {
                     state = state,
                     snackbarHostState = snackbarHostState,
                     onFilterChange = viewModel::setFilter,
-                    onImport = { picker.launch(arrayOf("application/epub+zip", "application/octet-stream")) },
+                    onImport = {
+                        picker.launch(
+                            arrayOf(
+                                "application/epub+zip",
+                                "application/octet-stream",
+                                "text/plain",
+                                "text/html",
+                                "application/xhtml+xml",
+                            ),
+                        )
+                    },
                     onOpen = { viewModel.open(it) },
                     onToggleFavorite = viewModel::toggleFavorite,
                     onDelete = viewModel::delete,
