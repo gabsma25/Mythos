@@ -13,12 +13,19 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.mythos.reader.ui.highlights.HighlightsScreen
+import com.mythos.reader.ui.highlights.asShareText
+import com.mythos.reader.ui.highlights.copyToClipboard
+import com.mythos.reader.ui.highlights.shareText
 import com.mythos.reader.ui.library.LibraryEvent
 import com.mythos.reader.ui.library.LibraryScreen
 import com.mythos.reader.ui.library.LibraryViewModel
@@ -40,6 +47,7 @@ class MainActivity : AppCompatActivity() {
             MythosTheme {
                 val state by viewModel.uiState.collectAsStateWithLifecycle()
                 val snackbarHostState = remember { SnackbarHostState() }
+                var showHighlights by rememberSaveable { mutableStateOf(false) }
 
                 // Alguns gerenciadores de arquivos informam EPUB como octet-stream;
                 // o importador valida o conteúdo de qualquer forma.
@@ -66,6 +74,19 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
+                if (showHighlights) {
+                    val highlights by viewModel.highlights.collectAsStateWithLifecycle()
+                    HighlightsScreen(
+                        books = highlights,
+                        onBack = { showHighlights = false },
+                        onOpen = viewModel::open,
+                        onCopy = { copyToClipboard("Destaque", it.text) },
+                        onShareBook = { shareText(it.asShareText()) },
+                        onDelete = viewModel::deleteHighlight,
+                    )
+                    return@MythosTheme
+                }
+
                 LibraryScreen(
                     state = state,
                     snackbarHostState = snackbarHostState,
@@ -81,11 +102,12 @@ class MainActivity : AppCompatActivity() {
                             ),
                         )
                     },
-                    onOpen = { viewModel.open(it) },
+                    onOpen = { viewModel.open(it.id) },
                     onToggleFavorite = viewModel::toggleFavorite,
                     onDelete = viewModel::delete,
                     onAddFolder = { folderPicker.launch(null) },
                     onRemoveFolder = viewModel::removeFolder,
+                    onOpenHighlights = { showHighlights = true },
                 )
             }
         }

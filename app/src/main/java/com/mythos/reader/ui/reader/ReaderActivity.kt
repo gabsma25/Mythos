@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.ActionMode
+import android.view.Menu
+import android.view.MenuItem
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -17,6 +20,8 @@ import com.mythos.reader.MainActivity
 import com.mythos.reader.appContainer
 import com.mythos.reader.reader.epub.EpubSession
 import com.mythos.reader.reader.epub.toEpubPreferences
+import com.mythos.reader.ui.highlights.copyToClipboard
+import com.mythos.reader.ui.highlights.shareText
 import com.mythos.reader.ui.theme.MythosTheme
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -66,7 +71,10 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
             listener = this,
             // A área da câmera é respeitada em CSS (env(safe-area-inset-top)), para que só o
             // texto desvie dela e as ilustrações possam ocupar a tela inteira.
-            configuration = EpubNavigatorFragment.Configuration(shouldApplyInsetsPadding = false),
+            configuration = EpubNavigatorFragment.Configuration(
+                shouldApplyInsetsPadding = false,
+                selectionActionModeCallback = selectionMenu,
+            ),
         )
         super.onCreate(savedInstanceState)
 
@@ -108,6 +116,45 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
         }
     }
 
+    private val navigator: EpubNavigatorFragment?
+        get() = supportFragmentManager.fragments.firstNotNullOfOrNull { it as? EpubNavigatorFragment }
+
+    /**
+     * Menu exibido ao selecionar um trecho. O Readium substitui o menu do sistema por este,
+     * então Copiar e Compartilhar precisam ser oferecidos aqui também.
+     */
+    private val selectionMenu = object : ActionMode.Callback {
+        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+            menu.add(Menu.NONE, MENU_HIGHLIGHT, 0, "Destacar")
+            menu.add(Menu.NONE, MENU_COPY, 1, android.R.string.copy)
+            menu.add(Menu.NONE, MENU_SHARE, 2, "Compartilhar")
+            return true
+        }
+
+        override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean = false
+
+        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+            val nav = navigator ?: return false
+            lifecycleScope.launch {
+                // A seleção é lida antes de fechar o menu, que a desfaz.
+                val selection = nav.currentSelection()?.locator
+                mode.finish()
+                nav.clearSelection()
+                val text = selection?.text?.highlight?.trim()?.takeIf { it.isNotEmpty() } ?: return@launch
+                when (item.itemId) {
+                    MENU_HIGHLIGHT -> viewModel.addHighlight(selection)
+                    MENU_COPY -> copyToClipboard(session.book.title, text)
+                    MENU_SHARE -> shareText(
+                        "“$text”\n— ${session.book.title}" + session.book.author?.let { ", $it" }.orEmpty(),
+                    )
+                }
+            }
+            return true
+        }
+
+        override fun onDestroyActionMode(mode: ActionMode) {}
+    }
+
     /** Oculta barras de sistema; um gesto na borda as revela temporariamente. */
     private fun enterImmersiveMode() {
         WindowCompat.enableEdgeToEdge(window)
@@ -126,6 +173,9 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
 
     companion object {
         private const val EXTRA_BOOK_ID = "bookId"
+        private const val MENU_HIGHLIGHT = 1
+        private const val MENU_COPY = 2
+        private const val MENU_SHARE = 3
 
         fun intent(context: Context, bookId: Long): Intent =
             Intent(context, ReaderActivity::class.java).putExtra(EXTRA_BOOK_ID, bookId)

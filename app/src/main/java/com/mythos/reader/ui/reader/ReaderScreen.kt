@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -57,8 +58,15 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mythos.reader.appContainer
+import com.mythos.reader.data.repository.locator
+import com.mythos.reader.model.Highlight
+import com.mythos.reader.ui.highlights.HighlightEditor
+import com.mythos.reader.ui.highlights.HighlightItem
+import com.mythos.reader.ui.highlights.copyToClipboard
 import com.mythos.reader.reader.epub.toEpubPreferences
 import kotlinx.coroutines.launch
+import org.readium.r2.navigator.DecorableNavigator
+import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.input.InputListener
 import org.readium.r2.navigator.input.TapEvent
@@ -67,7 +75,9 @@ import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.services.locateProgression
 
-private enum class ReaderSheet { NONE, SETTINGS, CONTENTS }
+private enum class ReaderSheet { NONE, SETTINGS, CONTENTS, HIGHLIGHTS }
+
+private const val HIGHLIGHT_GROUP = "highlights"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +99,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
         onPauseOrDispose { }
     }
 
+    val highlights by viewModel.highlights.collectAsStateWithLifecycle()
+    // Destaque tocado no texto; abre o painel de cor/remoção.
+    var editingHighlightId by rememberSaveable { mutableStateOf<Long?>(null) }
+
     val locator: Locator? by produceState(viewModel.session.lastLocator, navigator) {
         navigator?.currentLocator?.collect { value = it }
     }
@@ -99,6 +113,33 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
 
     LaunchedEffect(navigator, preferences) {
         navigator?.submitPreferences(preferences.toEpubPreferences())
+    }
+
+    // O Readium compara com a lista anterior e redesenha só o que mudou.
+    LaunchedEffect(navigator, highlights) {
+        navigator?.applyDecorations(
+            highlights.mapNotNull { highlight ->
+                Decoration(
+                    id = highlight.id.toString(),
+                    locator = highlight.locator() ?: return@mapNotNull null,
+                    style = Decoration.Style.Highlight(tint = highlight.color.argb.toInt()),
+                )
+            },
+            HIGHLIGHT_GROUP,
+        )
+    }
+
+    DisposableEffect(navigator) {
+        val nav = navigator ?: return@DisposableEffect onDispose { }
+        val listener = object : DecorableNavigator.Listener {
+            override fun onDecorationActivated(event: DecorableNavigator.OnActivatedEvent): Boolean {
+                editingHighlightId = event.decoration.id.toLongOrNull()
+                controlsVisible = false
+                return true
+            }
+        }
+        nav.addDecorationListener(HIGHLIGHT_GROUP, listener)
+        onDispose { nav.removeDecorationListener(listener) }
     }
 
     // Toques: bordas viram a página, o centro mostra ou oculta os controles.
@@ -141,6 +182,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 chapter = locator?.title,
                 onBack = onBack,
                 onContents = { sheet = ReaderSheet.CONTENTS },
+                onHighlights = { sheet = ReaderSheet.HIGHLIGHTS },
                 onSettings = { sheet = ReaderSheet.SETTINGS },
             )
         }
@@ -184,6 +226,51 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 },
             )
         }
+        ReaderSheet.HIGHLIGHTS -> ModalBottomSheet(onDismissRequest = { sheet = ReaderSheet.NONE }) {
+            KeepSystemBarsHidden()
+            BookHighlightsList(
+                highlights = highlights,
+                onSelect = { highlight ->
+                    highlight.locator()?.let { navigator?.go(it) }
+                    sheet = ReaderSheet.NONE
+                    controlsVisible = false
+                },
+            )
+        }
+    }
+
+    highlights.firstOrNull { it.id == editingHighlightId }?.let { highlight ->
+        ModalBottomSheet(onDismissRequest = { editingHighlightId = null }) {
+            KeepSystemBarsHidden()
+            HighlightEditor(
+                highlight = highlight,
+                onColor = { viewModel.setHighlightColor(highlight, it) },
+                onCopy = {
+                    context.copyToClipboard(publication.metadata.title.orEmpty(), highlight.text)
+                    editingHighlightId = null
+                },
+                onDelete = {
+                    viewModel.deleteHighlight(highlight)
+                    editingHighlightId = null
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun BookHighlightsList(highlights: List<Highlight>, onSelect: (Highlight) -> Unit) {
+    if (highlights.isEmpty()) {
+        Text(
+            "Nenhum destaque neste livro. Mantenha o dedo sobre uma palavra, ajuste a seleção e toque em Destacar.",
+            Modifier.padding(24.dp),
+        )
+        return
+    }
+    LazyColumn(Modifier.padding(bottom = 24.dp)) {
+        items(highlights, key = { it.id }) { highlight ->
+            HighlightItem(highlight, onOpen = { onSelect(highlight) })
+        }
     }
 }
 
@@ -211,6 +298,7 @@ private fun ReaderTopBar(
     chapter: String?,
     onBack: () -> Unit,
     onContents: () -> Unit,
+    onHighlights: () -> Unit,
     onSettings: () -> Unit,
 ) {
     Surface(tonalElevation = 3.dp, shadowElevation = 2.dp) {
@@ -232,6 +320,9 @@ private fun ReaderTopBar(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+            IconButton(onClick = onHighlights) {
+                Icon(Icons.Filled.FormatQuote, contentDescription = "Destaques")
             }
             IconButton(onClick = onContents) {
                 Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Sumário")

@@ -29,8 +29,12 @@ class EpubSessionStore(
 
     fun get(bookId: Long): EpubSession? = sessions[bookId]
 
-    suspend fun open(bookId: Long): Result<EpubSession> {
-        sessions[bookId]?.let { return Result.success(it) }
+    /** @param at posição onde o leitor deve abrir (ex.: um destaque); por padrão, a última lida. */
+    suspend fun open(bookId: Long, at: Locator? = null): Result<EpubSession> {
+        sessions[bookId]?.let { session ->
+            at?.let { session.lastLocator = it }
+            return Result.success(session)
+        }
 
         val book = bookRepository.get(bookId)
             ?: return Result.failure(IllegalStateException("Livro não encontrado."))
@@ -39,7 +43,7 @@ class EpubSessionStore(
         val locator = book.locatorJson?.let {
             runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull()
         }
-        val session = EpubSession(book, publication, EpubNavigatorFactory(publication), locator)
+        val session = EpubSession(book, publication, EpubNavigatorFactory(publication), at ?: locator)
         sessions[bookId] = session
         bookRepository.markOpened(bookId)
         return Result.success(session)

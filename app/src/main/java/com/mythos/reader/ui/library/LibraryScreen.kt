@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import com.mythos.reader.data.importer.LibraryFolder
 import com.mythos.reader.model.Book
 import com.mythos.reader.model.ReadingStatus
+import com.mythos.reader.ui.highlights.trechos
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -82,6 +85,7 @@ fun LibraryScreen(
     onDelete: (Book) -> Unit,
     onAddFolder: () -> Unit,
     onRemoveFolder: (LibraryFolder) -> Unit,
+    onOpenHighlights: () -> Unit,
 ) {
     var pendingDelete by remember { mutableStateOf<Book?>(null) }
     var foldersOpen by remember { mutableStateOf(false) }
@@ -115,7 +119,7 @@ fun LibraryScreen(
 
             when {
                 !state.isLoaded -> Box(Modifier.fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
-                state.books.isEmpty() -> EmptyLibrary(state.filter)
+                state.books.isEmpty() && !showsHighlights(state) -> EmptyLibrary(state.filter)
                 else -> LazyVerticalGrid(
                     // Colunas adaptativas: ~3 na tela externa, 5–6 na interna do Fold.
                     columns = GridCells.Adaptive(minSize = 112.dp),
@@ -123,6 +127,11 @@ fun LibraryScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
+                    if (showsHighlights(state)) {
+                        item(key = "highlights") {
+                            HighlightsCard(count = state.highlightCount, onOpen = onOpenHighlights)
+                        }
+                    }
                     items(state.books, key = { it.id }) { book ->
                         BookCard(
                             book = book,
@@ -140,7 +149,7 @@ fun LibraryScreen(
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("Remover livro?") },
-            text = { Text("“${book.title}” e o progresso de leitura serão apagados deste aparelho.") },
+            text = { Text("“${book.title}”, o progresso de leitura e os destaques serão apagados deste aparelho.") },
             confirmButton = {
                 TextButton(onClick = { onDelete(book); pendingDelete = null }) { Text("Remover") }
             },
@@ -152,6 +161,45 @@ fun LibraryScreen(
         ModalBottomSheet(onDismissRequest = { foldersOpen = false }) {
             FoldersSheet(folders = state.folders, onAdd = onAddFolder, onRemove = onRemoveFolder)
         }
+    }
+}
+
+private fun showsHighlights(state: LibraryUiState) =
+    state.highlightCount > 0 && state.filter == LibraryFilter.ALL
+
+/** A área "Destaques" aparece como mais um item da estante, ao lado dos livros. */
+@Composable
+private fun HighlightsCard(count: Int, onOpen: () -> Unit) {
+    Column(Modifier.clickable(onClick = onOpen)) {
+        Surface(
+            Modifier.fillMaxWidth().aspectRatio(2f / 3f).clip(RoundedCornerShape(6.dp)),
+            color = MaterialTheme.colorScheme.primaryContainer,
+        ) {
+            Column(
+                Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(
+                    Icons.Filled.FormatQuote,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(40.dp),
+                )
+                Text(
+                    "Destaques",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text("Destaques", style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+        Text(
+            trechos(count),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

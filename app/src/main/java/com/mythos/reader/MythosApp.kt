@@ -7,6 +7,7 @@ import com.mythos.reader.data.importer.BookImporter
 import com.mythos.reader.data.importer.LibraryFolders
 import com.mythos.reader.data.preferences.ReaderPreferencesRepository
 import com.mythos.reader.data.repository.BookRepository
+import com.mythos.reader.data.repository.HighlightRepository
 import com.mythos.reader.reader.ReadingFocusMode
 import com.mythos.reader.reader.epub.EpubSessionStore
 import com.mythos.reader.reader.epub.Readium
@@ -49,6 +50,7 @@ class AppContainer(context: Context) {
         importer = BookImporter(context, readium, database.bookDao()),
         folders = libraryFolders,
     )
+    val highlights = HighlightRepository(database.highlightDao())
     val readerPreferences = ReaderPreferencesRepository(context)
     val readingFocusMode = ReadingFocusMode(context)
     val epubSessions = EpubSessionStore(readium, bookRepository)

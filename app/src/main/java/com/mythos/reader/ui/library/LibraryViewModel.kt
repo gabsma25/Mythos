@@ -6,7 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.mythos.reader.AppContainer
 import com.mythos.reader.data.importer.ImportResult
 import com.mythos.reader.data.importer.LibraryFolder
+import com.mythos.reader.data.repository.locator
 import com.mythos.reader.model.Book
+import com.mythos.reader.model.BookHighlights
+import com.mythos.reader.model.Highlight
 import com.mythos.reader.model.ReadingStatus
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -18,6 +21,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.readium.r2.shared.publication.Locator
 
 enum class LibraryFilter(val label: String) {
     ALL("Todos"),
@@ -41,6 +45,8 @@ data class LibraryUiState(
     val folders: List<LibraryFolder> = emptyList(),
     val isLoaded: Boolean = false,
     val busyMessage: String? = null,
+    /** Total de trechos destacados; a área "Destaques" só aparece quando há algum. */
+    val highlightCount: Int = 0,
 )
 
 sealed interface LibraryEvent {
@@ -60,15 +66,21 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
     val events = _events.receiveAsFlow()
 
     val uiState: StateFlow<LibraryUiState> =
-        combine(repository.books, filter, folders.folders, busyMessage) { books, filter, folders, busy ->
+        combine(
+            repository.books, filter, folders.folders, busyMessage, container.highlights.count,
+        ) { books, filter, folders, busy, highlightCount ->
             LibraryUiState(
                 books = books.filter(filter::matches),
                 filter = filter,
                 folders = folders,
                 isLoaded = true,
                 busyMessage = busy,
+                highlightCount = highlightCount,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
+
+    val highlights: StateFlow<List<BookHighlights>> = container.highlights.byBook
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun setFilter(value: LibraryFilter) = filter.update { value }
 
@@ -111,10 +123,13 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
 
     fun open(book: Book) = open(book.id)
 
-    fun open(bookId: Long) {
+    /** Abre o livro direto no trecho destacado. */
+    fun open(highlight: Highlight) = open(highlight.bookId, highlight.locator())
+
+    fun open(bookId: Long, at: Locator? = null) {
         viewModelScope.launch {
             busyMessage.value = "Abrindo…"
-            container.epubSessions.open(bookId)
+            container.epubSessions.open(bookId, at)
                 .onSuccess { _events.send(LibraryEvent.OpenReader(bookId)) }
                 .onFailure { _events.send(LibraryEvent.Message("Não foi possível abrir o livro.")) }
             busyMessage.value = null
@@ -123,6 +138,10 @@ class LibraryViewModel(private val container: AppContainer) : ViewModel() {
 
     fun toggleFavorite(book: Book) {
         viewModelScope.launch { repository.setFavorite(book, !book.favorite) }
+    }
+
+    fun deleteHighlight(highlight: Highlight) {
+        viewModelScope.launch { container.highlights.delete(highlight.id) }
     }
 
     fun delete(book: Book) {
