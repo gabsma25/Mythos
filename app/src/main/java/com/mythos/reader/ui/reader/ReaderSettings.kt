@@ -1,5 +1,9 @@
 package com.mythos.reader.ui.reader
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,7 +23,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -32,11 +39,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.mythos.reader.model.ReaderColumns
@@ -44,6 +54,7 @@ import com.mythos.reader.model.ReaderFont
 import com.mythos.reader.model.ReaderPageTurn
 import com.mythos.reader.model.ReaderPreferences
 import com.mythos.reader.model.ReaderTextAlign
+import com.mythos.reader.model.ReaderTextPalette
 import com.mythos.reader.model.ReaderTheme
 import kotlin.math.roundToInt
 
@@ -52,10 +63,6 @@ private val BackgroundPalette = listOf(
     0xFFDADADA, 0xFF2A2633, 0xFF1E1E1E, 0xFF10161C, 0xFF000000,
 ).map { it.toInt() }
 
-private val TextPalette = listOf(
-    0xFF000000, 0xFF2B2B2B, 0xFF5B4636, 0xFF2F3B2B, 0xFF1F3550,
-    0xFFA8A8A8, 0xFFCFC6B8, 0xFFE8E2D4, 0xFFFFC98B, 0xFFFFFFFF,
-).map { it.toInt() }
 
 @Composable
 fun ReaderSettings(
@@ -96,7 +103,7 @@ fun ReaderSettings(
                 }
             }
             Section("Cor do texto") {
-                ColorRow(TextPalette, preferences.customText) { color ->
+                ColorRow(ReaderTextPalette, preferences.customText) { color ->
                     onChange { it.copy(customText = color) }
                 }
             }
@@ -120,97 +127,142 @@ fun ReaderSettings(
         PreferenceSlider("Tamanho do texto", preferences.fontSize, 0.6..2.5, steps = 18, format = ::percent) { v ->
             onChange { it.copy(fontSize = v) }
         }
-        PreferenceSlider("Entrelinhas", preferences.lineHeight, 1.0..2.2, steps = 11, format = ::decimal) { v ->
-            onChange { it.copy(lineHeight = v) }
-        }
-        PreferenceSlider("Espaço entre parágrafos", preferences.paragraphSpacing, 0.0..2.0, steps = 7, format = ::decimal) { v ->
-            onChange { it.copy(paragraphSpacing = v) }
-        }
-        PreferenceSlider("Espaço entre letras", preferences.letterSpacing, 0.0..0.3, steps = 5, format = ::percent) { v ->
-            onChange { it.copy(letterSpacing = v) }
-        }
-        PreferenceSlider("Espaço entre palavras", preferences.wordSpacing, 0.0..1.0, steps = 9, format = ::percent) { v ->
-            onChange { it.copy(wordSpacing = v) }
-        }
-        PreferenceSlider("Margens", preferences.pageMargins, 0.5..2.5, steps = 7, format = ::decimal) { v ->
-            onChange { it.copy(pageMargins = v) }
-        }
 
-        Section("Alinhamento") {
-            Segmented(ReaderTextAlign.entries, preferences.textAlign, { it.label }) { value ->
-                onChange { it.copy(textAlign = value) }
+        // O básico fica à vista; ajustes finos e opções de leitura abrem só quando pedidos.
+        Expandable("Mais opções de texto", "Espaçamentos, margens, alinhamento e colunas") {
+            PreferenceSlider("Entrelinhas", preferences.lineHeight, 1.0..2.2, steps = 11, format = ::decimal) { v ->
+                onChange { it.copy(lineHeight = v) }
             }
-        }
+            PreferenceSlider("Espaço entre parágrafos", preferences.paragraphSpacing, 0.0..2.0, steps = 7, format = ::decimal) { v ->
+                onChange { it.copy(paragraphSpacing = v) }
+            }
+            PreferenceSlider("Espaço entre letras", preferences.letterSpacing, 0.0..0.3, steps = 5, format = ::percent) { v ->
+                onChange { it.copy(letterSpacing = v) }
+            }
+            PreferenceSlider("Espaço entre palavras", preferences.wordSpacing, 0.0..1.0, steps = 9, format = ::percent) { v ->
+                onChange { it.copy(wordSpacing = v) }
+            }
+            PreferenceSlider("Margens", preferences.pageMargins, 0.5..2.5, steps = 7, format = ::decimal) { v ->
+                onChange { it.copy(pageMargins = v) }
+            }
 
-        Section("Colunas") {
-            Segmented(ReaderColumns.entries, preferences.columns, { it.label }) { value ->
-                onChange { it.copy(columns = value) }
-            }
-            Text(
-                "No modo automático, o Fold aberto na horizontal mostra duas páginas lado a lado, como um livro.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-        }
-
-        Section("Virar a página") {
-            Segmented(ReaderPageTurn.entries, preferences.pageTurn, { it.label }) { value ->
-                onChange { it.copy(pageTurn = value) }
-            }
-            Text(
-                "Folha: a página vira como papel e acompanha o dedo ao deslizar.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-        }
-
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Não perturbe durante a leitura", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                Switch(
-                    checked = preferences.doNotDisturb,
-                    onCheckedChange = { checked ->
-                        onChange { it.copy(doNotDisturb = checked) }
-                        if (checked && !focusPermissionGranted) onRequestFocusPermission()
-                    },
-                )
-            }
-            if (preferences.doNotDisturb && !focusPermissionGranted) {
-                Text(
-                    "Falta permitir o acesso ao Não perturbe para o Mythos.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                TextButton(onClick = onRequestFocusPermission, contentPadding = PaddingValues(0.dp)) {
-                    Text("Abrir configurações")
+            Section("Alinhamento") {
+                Segmented(ReaderTextAlign.entries, preferences.textAlign, { it.label }) { value ->
+                    onChange { it.copy(textAlign = value) }
                 }
-            } else {
+            }
+
+            Section("Colunas") {
+                Segmented(ReaderColumns.entries, preferences.columns, { it.label }) { value ->
+                    onChange { it.copy(columns = value) }
+                }
                 Text(
-                    "Silencia notificações, sons e vibração enquanto um livro estiver aberto. " +
-                        "Alarmes e chamadas repetidas continuam tocando. Ajuste as exceções em " +
-                        "Configurações › Modos › Leitura Mythos.",
+                    "No modo automático, o Fold aberto na horizontal mostra duas páginas lado a lado, como um livro.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        }
+
+        Expandable("Leitura", "Virar a página, Não perturbe e Duo performático") {
+            Section("Virar a página") {
+                Segmented(ReaderPageTurn.entries, preferences.pageTurn, { it.label }) { value ->
+                    onChange { it.copy(pageTurn = value) }
+                }
+                Text(
+                    "Folha: a página vira como papel e acompanha o dedo ao deslizar.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Não perturbe durante a leitura", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                    Switch(
+                        checked = preferences.doNotDisturb,
+                        onCheckedChange = { checked ->
+                            onChange { it.copy(doNotDisturb = checked) }
+                            if (checked && !focusPermissionGranted) onRequestFocusPermission()
+                        },
+                    )
+                }
+                if (preferences.doNotDisturb && !focusPermissionGranted) {
+                    Text(
+                        "Falta permitir o acesso ao Não perturbe para o Mythos.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    TextButton(onClick = onRequestFocusPermission, contentPadding = PaddingValues(0.dp)) {
+                        Text("Abrir configurações")
+                    }
+                } else {
+                    Text(
+                        "Silencia notificações, sons e vibração enquanto um livro estiver aberto. " +
+                            "Alarmes e chamadas repetidas continuam tocando. Ajuste as exceções em " +
+                            "Configurações › Modos › Leitura Mythos.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Duo performático", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                    Switch(
+                        checked = preferences.duoCover,
+                        onCheckedChange = { checked -> onChange { it.copy(duoCover = checked) } },
+                    )
+                }
+                Text(
+                    "Com o Fold aberto, mostra a capa do livro na tela externa enquanto você lê. " +
+                        "Ao fechar o aparelho ou sair do livro, a tela externa volta ao normal.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+    }
+}
 
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Duo performático", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                Switch(
-                    checked = preferences.duoCover,
-                    onCheckedChange = { checked -> onChange { it.copy(duoCover = checked) } },
-                )
+/** Grupo que começa fechado e abre ao tocar no título; lembra o estado enquanto o painel existir. */
+@Composable
+private fun Expandable(title: String, summary: String, content: @Composable () -> Unit) {
+    var expanded by rememberSaveable(title) { mutableStateOf(false) }
+    val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "chevron")
+    Column {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .clickable { expanded = !expanded }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                if (!expanded) {
+                    Text(
+                        summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            Text(
-                "Com o Fold aberto, mostra a capa do livro na tela externa enquanto você lê. " +
-                    "Ao fechar o aparelho ou sair do livro, a tela externa volta ao normal.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Icon(
+                Icons.Default.ExpandMore,
+                contentDescription = if (expanded) "Recolher" else "Expandir",
+                modifier = Modifier.rotate(rotation),
             )
+        }
+        AnimatedVisibility(visible = expanded, enter = expandVertically(), exit = shrinkVertically()) {
+            Column(
+                Modifier.padding(top = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) { content() }
         }
     }
 }

@@ -28,6 +28,16 @@ data class ReaderPreferences(
     val textColor: Int get() = if (theme == ReaderTheme.CUSTOM) customText else theme.text
 }
 
+/** Cores de texto oferecidas no tema Personalizado. */
+val ReaderTextPalette: List<Int> = listOf(
+    0xFF000000, 0xFF2B2B2B, 0xFF5B4636, 0xFF2F3B2B, 0xFF1F3550,
+    0xFFA8A8A8, 0xFFCFC6B8, 0xFFE8E2D4, 0xFFFFC98B, 0xFFFFFFFF,
+).map { it.toInt() }
+
+/** Toda cor que o texto do leitor pode ter: a dos temas prontos e a da paleta personalizada. */
+val ReaderTextColors: Set<Int>
+    get() = ReaderTheme.entries.filter { it != ReaderTheme.CUSTOM }.map { it.text }.toSet() + ReaderTextPalette
+
 /** `cssName` corresponde ao nome de família de fonte aceito pelo Readium. */
 @Serializable
 enum class ReaderFont(val label: String, val cssName: String?) {

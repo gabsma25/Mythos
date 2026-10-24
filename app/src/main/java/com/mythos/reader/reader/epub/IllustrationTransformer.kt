@@ -1,6 +1,7 @@
 package com.mythos.reader.reader.epub
 
 import android.graphics.BitmapFactory
+import com.mythos.reader.model.ReaderTextColors
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.data.Container
@@ -61,7 +62,8 @@ private suspend fun transformHtml(documentUrl: Url, html: String, images: Contai
         }
     }
 
-    val style = if (marked) PAGE_FRAME_STYLE + ILLUSTRATION_STYLE else PAGE_FRAME_STYLE
+    val frame = PAGE_FRAME_STYLE + COLOR_FONT_STYLE
+    val style = if (marked) frame + ILLUSTRATION_STYLE else frame
     val headEnd = withSvg.indexOf("</head>", ignoreCase = true)
     return if (headEnd >= 0) withSvg.replaceRange(headEnd, headEnd, style) else withSvg
 }
@@ -148,6 +150,22 @@ html:root { padding-top: var(--mythos-pad-top) !important; padding-bottom: var(-
 }
 </style>
 """.trimIndent()
+
+/**
+ * A AccessibleDfA desenha a vírgula com uma cor própria (glifo colorido, tabela COLR), preta,
+ * que ignora a cor do texto e some nos temas escuros. `override-colors` troca essa cor, mas só
+ * aceita cores fixas; como o texto só pode ter as cores de [ReaderTextColors], há uma paleta
+ * para cada uma, escolhida pela cor que o Readium escreve no `style` da página (`#RRGGBB`).
+ */
+private val COLOR_FONT_STYLE: String = buildString {
+    append("<style type=\"text/css\">\n")
+    for (argb in ReaderTextColors) {
+        val hex = "%06X".format(argb and 0xFFFFFF)
+        append("@font-palette-values --mythos-text-$hex { font-family: \"AccessibleDfA\"; override-colors: 0 #$hex; }\n")
+        append(":root[style*=\"--USER__textColor: #$hex\"] { font-palette: --mythos-text-$hex; }\n")
+    }
+    append("</style>\n")
+}
 
 /**
  * A página tem a largura da tela, ou metade dela no livro aberto (duas colunas). A ilustração sai do padding do <body> com o truque
