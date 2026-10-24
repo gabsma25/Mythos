@@ -148,6 +148,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     SideEffect {
         pageFlip.spread = spread
         pageFlip.paperColor = preferences.backgroundColor
+        pageFlip.darkPaper = preferences.isDark
     }
     DisposableEffect(Unit) { onDispose { pageFlip.dispose() } }
     // Livros da direita para a esquerda continuam com o deslizamento do Readium.
@@ -218,9 +219,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
         AndroidFragment<EpubNavigatorFragment>(
             Modifier.fillMaxSize().pageFlipGestures(pageFlip) { canDragFlip },
         ) { navigator = it }
-        PageFlipOverlay(pageFlip)
-        // Por cima da folha: a lombada continua no lugar enquanto a página vira.
         if (spread) BookSpine(dark = preferences.isDark)
+        // Por cima da lombada: durante a virada, a cobertura desenha a própria lombada sob a
+        // folha, para a sombra do vinco não cair sobre a página que está virando.
+        PageFlipOverlay(pageFlip)
 
         AnimatedVisibility(
             visible = controlsVisible,

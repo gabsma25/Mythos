@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.shared.publication.services.coverFitting
 import org.readium.r2.shared.util.AbsoluteUrl
 
 class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
@@ -132,7 +133,11 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
                         if (enabled) {
                             DuoDisplay.present(this@ReaderActivity) {
                                 val progression by viewModel.progression.collectAsStateWithLifecycle()
-                                MythosTheme { DuoCover(session.book, progression) }
+                                MythosTheme {
+                                    DuoCover(session.book, progression) { size ->
+                                        session.publication.coverFitting(size)
+                                    }
+                                }
                             }
                         }
                     }

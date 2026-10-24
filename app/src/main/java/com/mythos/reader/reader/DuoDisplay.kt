@@ -1,5 +1,6 @@
 package com.mythos.reader.reader
 
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ComposeView
@@ -14,6 +15,7 @@ import androidx.window.area.WindowAreaSessionPresenter
 import androidx.window.core.ExperimentalWindowApi
 import kotlin.coroutines.resume
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -52,27 +54,39 @@ object DuoDisplay {
             // Ao dobrar/desdobrar, a Activity é recriada em seguida; esperar um pouco evita
             // que a instância de saída abra uma apresentação que duraria uma fração de segundo.
             .debounce(SETTLE_MS)
-            .collectLatest { token -> if (token != null) presentUntilEnded(controller, token, activity, content) }
+            .collectLatest { token ->
+                if (token == null) return@collectLatest
+                // Ao girar a tela, a tela externa some por um instante e pode não estar lá quando
+                // a sessão começa; nesse caso tenta de novo em seguida, poucas vezes.
+                repeat(SHOW_ATTEMPTS) {
+                    if (!presentUntilEnded(controller, token, activity, content)) return@collectLatest
+                    delay(RETRY_MS)
+                }
+            }
     }
 
     private val WindowAreaInfo.presentStatus: WindowAreaCapability.Status?
         get() = getCapability(WindowAreaCapability.Operation.OPERATION_PRESENT_ON_AREA)?.status
 
     private const val SETTLE_MS = 300L
+    private const val SHOW_ATTEMPTS = 3
+    private const val RETRY_MS = 500L
 
     /**
      * Suspende enquanto a apresentação durar. Se o sistema a encerrar (aparelho fechado),
      * retorna e aguarda a tela externa ficar disponível de novo, sem insistir em loop.
+     *
+     * @return verdadeiro se a tela externa sumiu antes de a capa aparecer (vale tentar de novo).
      */
     private suspend fun presentUntilEnded(
         controller: WindowAreaController,
         token: android.os.Binder,
         activity: ComponentActivity,
         content: @Composable () -> Unit,
-    ) {
+    ): Boolean {
         var session: WindowAreaSessionPresenter? = null
         try {
-            suspendCancellableCoroutine<Unit> { continuation ->
+            return suspendCancellableCoroutine { continuation ->
                 val callback = object : WindowAreaPresentationSessionCallback {
                     override fun onSessionStarted(presenter: WindowAreaSessionPresenter) {
                         if (!continuation.isActive) return presenter.close()
@@ -84,13 +98,20 @@ object DuoDisplay {
                             setViewTreeSavedStateRegistryOwner(activity)
                             setContent(content)
                         }
-                        presenter.setContentView(view)
+                        try {
+                            presenter.setContentView(view)
+                        } catch (_: WindowManager.InvalidDisplayException) {
+                            // A sessão começou, mas a tela externa já não existe (rotação).
+                            runCatching { presenter.close() }
+                            if (continuation.isActive) continuation.resume(true)
+                            return
+                        }
                         session = presenter
                     }
 
                     override fun onSessionEnded(t: Throwable?) {
                         session = null
-                        if (continuation.isActive) continuation.resume(Unit)
+                        if (continuation.isActive) continuation.resume(false)
                     }
 
                     override fun onContainerVisibilityChanged(isVisible: Boolean) {}
@@ -98,7 +119,7 @@ object DuoDisplay {
                 // Nunca deixa uma falha do sistema derrubar o leitor.
                 runCatching {
                     controller.presentContentOnWindowArea(token, activity, activity.mainExecutor, callback)
-                }.onFailure { if (continuation.isActive) continuation.resume(Unit) }
+                }.onFailure { if (continuation.isActive) continuation.resume(false) }
             }
         } finally {
             runCatching { session?.close() }

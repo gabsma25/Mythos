@@ -44,10 +44,31 @@ internal class PageCurl {
     private var paperColor = 0
 
     /**
-     * Desenha a virada completa: as páginas que ficam por baixo, a sombra e a folha.
-     * [progress] vai de 0 (antes) a 1 (virada concluída).
+     * Páginas que ficam por baixo da folha. A lombada é desenhada entre esta etapa e
+     * [drawTurningLeaf], para ficar sob a folha que vira e não por cima dela.
      */
-    fun render(
+    fun drawPagesUnder(
+        canvas: Canvas,
+        width: Float,
+        height: Float,
+        before: Bitmap,
+        after: Bitmap,
+        spread: Boolean,
+        forward: Boolean,
+    ) {
+        if (spread) {
+            // O lado de onde a folha sai já mostra a página nova; o outro, a antiga até ser coberto.
+            drawSlice(canvas, after, if (forward) 0.5f else 0f, width, height)
+            drawSlice(canvas, before, if (forward) 0f else 0.5f, width, height)
+        } else {
+            // Voltando, a página anterior desce de volta por cima da atual.
+            dstRect.set(0f, 0f, width, height)
+            canvas.drawBitmap(if (forward) after else before, null, dstRect, bitmapPaint)
+        }
+    }
+
+    /** A folha que vira e a sombra dela. [progress] vai de 0 (antes) a 1 (virada concluída). */
+    fun drawTurningLeaf(
         canvas: Canvas,
         width: Float,
         height: Float,
@@ -61,11 +82,8 @@ internal class PageCurl {
         val half = width / 2f
         if (spread) {
             // Avançando, a folha sai da direita (frente = direita atual, verso = esquerda
-            // seguinte); voltando, sai da esquerda. Por baixo, o lado de onde a folha sai já
-            // mostra a página nova e o outro a antiga, até ser coberto.
+            // seguinte); voltando, sai da esquerda.
             val dir = if (forward) 1f else -1f
-            drawSlice(canvas, after, if (forward) 0.5f else 0f, width, height)
-            drawSlice(canvas, before, if (forward) 0f else 0.5f, width, height)
             shape(progress, returning = false)
             drawLeaf(
                 canvas, width, height,
@@ -74,9 +92,7 @@ internal class PageCurl {
                 back = after, backStart = half, backDir = -dir,
             )
         } else {
-            // Presa à borda esquerda. Voltando, a página anterior desce de volta por cima.
-            dstRect.set(0f, 0f, width, height)
-            canvas.drawBitmap(if (forward) after else before, null, dstRect, bitmapPaint)
+            // Presa à borda esquerda.
             shape(progress, returning = !forward)
             drawLeaf(
                 canvas, width, height,

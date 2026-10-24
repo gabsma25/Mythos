@@ -65,8 +65,14 @@
             </intent-filter>
         </activity>
 
+        <!--
+            Girar a tela não recria o leitor: o Compose e o Readium se ajustam ao novo tamanho
+            (colunas incluídas). Assim a capa do Duo performático continua na tela externa, sem
+            o aviso "A tela dupla está ativada" a cada giro, e a página não pisca.
+        -->
         <activity
             android:name=".ui.reader.ReaderActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
             android:exported="false"
             android:theme="@style/Theme.Mythos.Reader" />
     </application>

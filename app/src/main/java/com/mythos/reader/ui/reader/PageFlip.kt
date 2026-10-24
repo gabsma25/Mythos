@@ -18,6 +18,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.geometry.Offset
@@ -58,6 +59,9 @@ class PageFlipController(
 
     /** Cor do fundo do leitor; é o verso liso de uma página única. */
     var paperColor: Int = 0xFFFFFFFF.toInt()
+
+    /** Tema escuro: a lombada desenhada sob a folha precisa de mais contraste. */
+    var darkPaper: Boolean = false
 
     /** Foto da página de antes da virada; enquanto houver, a cobertura está na tela. */
     var before by mutableStateOf<ImageBitmap?>(null)
@@ -276,17 +280,20 @@ fun PageFlipOverlay(controller: PageFlipController, modifier: Modifier = Modifie
             drawImage(before, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()))
             return@Canvas
         }
+        val beforePage = before.asAndroidBitmap()
+        val afterPage = after.asAndroidBitmap()
         drawIntoCanvas { canvas ->
-            curl.render(
-                canvas.nativeCanvas,
-                size.width,
-                size.height,
-                before.asAndroidBitmap(),
-                after.asAndroidBitmap(),
-                controller.progress,
-                controller.spread,
-                controller.forward,
-                controller.paperColor,
+            curl.drawPagesUnder(
+                canvas.nativeCanvas, size.width, size.height, beforePage, afterPage,
+                controller.spread, controller.forward,
+            )
+        }
+        // A lombada fica nas páginas, por baixo da folha que vira.
+        if (controller.spread) drawBookSpine(controller.darkPaper)
+        drawIntoCanvas { canvas ->
+            curl.drawTurningLeaf(
+                canvas.nativeCanvas, size.width, size.height, beforePage, afterPage,
+                controller.progress, controller.spread, controller.forward, controller.paperColor,
             )
         }
     }
@@ -298,52 +305,54 @@ fun PageFlipOverlay(controller: PageFlipController, modifier: Modifier = Modifie
  */
 @Composable
 fun BookSpine(dark: Boolean, modifier: Modifier = Modifier) {
+    Canvas(modifier.fillMaxSize()) { drawBookSpine(dark) }
+}
+
+private fun DrawScope.drawBookSpine(dark: Boolean) {
     val strength = if (dark) 0.35f else 0.16f
-    Canvas(modifier.fillMaxSize()) {
-        val spine = size.width / 2f
-        val fold = size.width * 0.045f
-        drawRect(
-            Brush.horizontalGradient(
-                0f to Color.Transparent,
-                0.7f to Color.Black.copy(alpha = strength * 0.45f),
-                1f to Color.Black.copy(alpha = strength),
-                startX = spine - fold,
-                endX = spine,
-            ),
-            topLeft = Offset(spine - fold, 0f),
-            size = Size(fold, size.height),
-        )
-        drawRect(
-            Brush.horizontalGradient(
-                0f to Color.Black.copy(alpha = strength),
-                0.3f to Color.Black.copy(alpha = strength * 0.45f),
-                1f to Color.Transparent,
-                startX = spine,
-                endX = spine + fold,
-            ),
-            topLeft = Offset(spine, 0f),
-            size = Size(fold, size.height),
-        )
-        // Bordas externas: o papel "desce" levemente em direção às margens.
-        val edge = size.width * 0.02f
-        drawRect(
-            Brush.horizontalGradient(
-                0f to Color.Black.copy(alpha = strength * 0.4f),
-                1f to Color.Transparent,
-                startX = 0f,
-                endX = edge,
-            ),
-            size = Size(edge, size.height),
-        )
-        drawRect(
-            Brush.horizontalGradient(
-                0f to Color.Transparent,
-                1f to Color.Black.copy(alpha = strength * 0.4f),
-                startX = size.width - edge,
-                endX = size.width,
-            ),
-            topLeft = Offset(size.width - edge, 0f),
-            size = Size(edge, size.height),
-        )
-    }
+    val spine = size.width / 2f
+    val fold = size.width * 0.045f
+    drawRect(
+        Brush.horizontalGradient(
+            0f to Color.Transparent,
+            0.7f to Color.Black.copy(alpha = strength * 0.45f),
+            1f to Color.Black.copy(alpha = strength),
+            startX = spine - fold,
+            endX = spine,
+        ),
+        topLeft = Offset(spine - fold, 0f),
+        size = Size(fold, size.height),
+    )
+    drawRect(
+        Brush.horizontalGradient(
+            0f to Color.Black.copy(alpha = strength),
+            0.3f to Color.Black.copy(alpha = strength * 0.45f),
+            1f to Color.Transparent,
+            startX = spine,
+            endX = spine + fold,
+        ),
+        topLeft = Offset(spine, 0f),
+        size = Size(fold, size.height),
+    )
+    // Bordas externas: o papel "desce" levemente em direção às margens.
+    val edge = size.width * 0.02f
+    drawRect(
+        Brush.horizontalGradient(
+            0f to Color.Black.copy(alpha = strength * 0.4f),
+            1f to Color.Transparent,
+            startX = 0f,
+            endX = edge,
+        ),
+        size = Size(edge, size.height),
+    )
+    drawRect(
+        Brush.horizontalGradient(
+            0f to Color.Transparent,
+            1f to Color.Black.copy(alpha = strength * 0.4f),
+            startX = size.width - edge,
+            endX = size.width,
+        ),
+        topLeft = Offset(size.width - edge, 0f),
+        size = Size(edge, size.height),
+    )
 }
