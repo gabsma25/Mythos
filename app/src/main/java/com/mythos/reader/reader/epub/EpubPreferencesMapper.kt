@@ -31,7 +31,8 @@ private const val BOOK_SPREAD_MIN_WIDTH_DP = 840
 
 /**
  * @param spread resultado de [isBookSpread]; decidido aqui, e não pelo modo automático do
- * Readium, para que a lombada desenhada pelo app coincida sempre com as colunas.
+ * Readium, para que a lombada desenhada pelo app coincida sempre com as colunas. Abaixo de
+ * 960 dp, as duas colunas dependem do CSS injetado em IllustrationTransformer.
  */
 fun ReaderPreferences.toEpubPreferences(spread: Boolean): EpubPreferences = EpubPreferences(
     fontFamily = font.cssName?.let(::FontFamily),

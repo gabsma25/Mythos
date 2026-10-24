@@ -129,16 +129,28 @@ private val TAG_NAME = Regex("^<[a-zA-Z]+")
  */
 private const val STYLE_MARKER = "mythos-page-frame"
 
+/*
+ * Margens de cima e de baixo do texto e, quando o app pede duas colunas (livro aberto), as
+ * colunas em si: o Readium CSS só as aceita a partir de 960 dp, e a tela interna do Fold
+ * deitada tem menos que isso. Como o app sempre envia uma ou duas colunas explicitamente
+ * (nunca "automático"), a regra vale só quando ele decidiu pelo livro aberto.
+ */
+
 private val PAGE_FRAME_STYLE = """
 <style type="text/css" id="$STYLE_MARKER">
 :root { --mythos-pad-top: calc(env(safe-area-inset-top, 0px) + 40px); --mythos-pad-bottom: calc(env(safe-area-inset-bottom, 0px) + 40px); }
 html:root { padding-top: var(--mythos-pad-top) !important; padding-bottom: var(--mythos-pad-bottom) !important; }
+:root[style*="--USER__colCount: 2"], :root[style*="--USER__colCount:2"] {
+  --RS__colWidth: auto !important;
+  --RS__colCount: 2 !important;
+  -webkit-column-count: 2 !important;
+  column-count: 2 !important;
+}
 </style>
 """.trimIndent()
 
 /**
- * A página tem a largura da tela, ou metade dela quando o Readium usa duas colunas
- * (mesmos critérios do Readium CSS). A ilustração sai do padding do <body> com o truque
+ * A página tem a largura da tela, ou metade dela no livro aberto (duas colunas). A ilustração sai do padding do <body> com o truque
  * de full-bleed `margin-left: calc(50% - largura / 2)` e sobe sobre a margem de cima com
  * `position: relative` — um `margin-top` negativo seria descartado pelo Chromium, que trunca
  * margens junto de quebras de coluna. Como é um bloco indivisível de 100vh, ocupa a página inteira.
@@ -146,10 +158,7 @@ html:root { padding-top: var(--mythos-pad-top) !important; padding-bottom: var(-
 private val ILLUSTRATION_STYLE = """
 <style type="text/css">
 :root { --mythos-page-width: 100vw; }
-@media screen and (min-width: 60em), screen and (min-device-width: 36em) and (max-device-width: 47em) and (orientation: landscape) {
-  :root { --mythos-page-width: 50vw; }
-  :root[style*="--USER__colCount: 1"], :root[style*="--USER__colCount:1"] { --mythos-page-width: 100vw; }
-}
+:root[style*="--USER__colCount: 2"], :root[style*="--USER__colCount:2"] { --mythos-page-width: 50vw; }
 .$ILLUSTRATION_CLASS {
   display: block !important;
   -webkit-column-break-before: always; break-before: column !important;

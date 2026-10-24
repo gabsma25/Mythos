@@ -145,7 +145,10 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     }
 
     val pageFlip = remember { PageFlipController(scope) { navigator } }
-    SideEffect { pageFlip.spread = spread }
+    SideEffect {
+        pageFlip.spread = spread
+        pageFlip.paperColor = preferences.backgroundColor
+    }
     DisposableEffect(Unit) { onDispose { pageFlip.dispose() } }
     // Livros da direita para a esquerda continuam com o deslizamento do Readium.
     val flipPages = preferences.pageTurn == ReaderPageTurn.FLIP &&

@@ -8,7 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -17,26 +16,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import kotlin.math.PI
 import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.roundToInt
-import kotlin.math.sin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
@@ -61,6 +56,9 @@ class PageFlipController(
 ) {
     var spread by mutableStateOf(false)
 
+    /** Cor do fundo do leitor; é o verso liso de uma página única. */
+    var paperColor: Int = 0xFFFFFFFF.toInt()
+
     /** Foto da página de antes da virada; enquanto houver, a cobertura está na tela. */
     var before by mutableStateOf<ImageBitmap?>(null)
         private set
@@ -84,6 +82,9 @@ class PageFlipController(
 
     private var prepared: Deferred<Boolean>? = null
     private var dragWidth = 1f
+    /** Fração da largura que o dedo percorreu no sentido da virada; decide se ela se completa. */
+    private var dragTravel = 0f
+    private val curl = PageCurl()
 
     /** Virada completa e automática (toque na borda). */
     fun turn(forward: Boolean) {
@@ -103,11 +104,20 @@ class PageFlipController(
         prepared = job
     }
 
-    /** [dx] é o deslocamento total do dedo desde o toque inicial. */
+    /**
+     * [dx] é o deslocamento total do dedo desde o toque inicial. A borda solta da folha fica
+     * sob o dedo; sem isso ela andaria mais rápido que ele, porque vai à frente do resto da folha.
+     */
     fun drag(dx: Float) {
         if (prepared == null) return
-        val towards = if (forward) -dx else dx
-        progress = (towards / dragWidth).coerceIn(0f, 1f)
+        dragTravel = ((if (forward) -dx else dx) / dragWidth).coerceIn(0f, 1f)
+        progress = when {
+            // A borda solta parte da direita da tela (avançando) ou da esquerda (voltando no livro aberto).
+            forward -> curl.progressForEdge(dragWidth + dx, dragWidth, spread, forward = true)
+            spread -> curl.progressForEdge(dx, dragWidth, spread = true, forward = false)
+            // Página única voltando: a folha vem de fora da tela, não há borda para seguir.
+            else -> dragTravel
+        }
     }
 
     /** Fim do arraste: completa a virada ou devolve a folha, conforme distância e velocidade. */
@@ -117,7 +127,7 @@ class PageFlipController(
         scope.launch {
             if (!job.await()) return@launch
             val towards = if (forward) -velocityX else velocityX
-            val commit = towards > FLING_VELOCITY || (towards > -FLING_VELOCITY && progress > COMMIT_PROGRESS)
+            val commit = towards > FLING_VELOCITY || (towards > -FLING_VELOCITY && dragTravel > COMMIT_PROGRESS)
             if (commit) {
                 animateTo(1f, (TURN_MS * (1f - progress)).toInt().coerceAtLeast(MIN_SETTLE_MS))
             } else {
@@ -134,6 +144,7 @@ class PageFlipController(
         val view = navigator()?.view?.takeIf { it.width > 0 && it.height > 0 } ?: return false
         this.forward = forward
         progress = 0f
+        dragTravel = 0f
         after = null
         beforeBuffer = capture(view, beforeBuffer)
         before = beforeBuffer!!.asImageBitmap()
@@ -259,140 +270,25 @@ fun Modifier.pageFlipGestures(controller: PageFlipController, enabled: () -> Boo
 fun PageFlipOverlay(controller: PageFlipController, modifier: Modifier = Modifier) {
     val before = controller.before ?: return
     val after = controller.after
-    Box(modifier.fillMaxSize()) {
+    val curl = remember { PageCurl() }
+    Canvas(modifier.fillMaxSize()) {
         if (after == null) {
-            Canvas(Modifier.fillMaxSize()) { drawPage(before, 0f, 1f) }
-            return@Box
+            drawImage(before, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()))
+            return@Canvas
         }
-        val progress = controller.progress
-        if (controller.spread) {
-            SpreadFlip(before, after, progress, controller.forward)
-        } else {
-            SingleFlip(before, after, progress, controller.forward)
+        drawIntoCanvas { canvas ->
+            curl.render(
+                canvas.nativeCanvas,
+                size.width,
+                size.height,
+                before.asAndroidBitmap(),
+                after.asAndroidBitmap(),
+                controller.progress,
+                controller.spread,
+                controller.forward,
+                controller.paperColor,
+            )
         }
-    }
-}
-
-/**
- * Livro aberto. Avançando, a folha da direita levanta da lombada (frente = direita atual),
- * passa pela vertical e deita à esquerda mostrando o verso (= esquerda seguinte).
- * Voltando, o mesmo movimento espelhado.
- */
-@Composable
-private fun SpreadFlip(before: ImageBitmap, after: ImageBitmap, progress: Float, forward: Boolean) {
-    // Metade de origem da folha: direita ao avançar, esquerda ao voltar.
-    val leafFrom = if (forward) 0.5f else 0f
-    val leafTo = 0.5f - leafFrom
-    val firstHalf = progress < 0.5f
-    // 0° deitada, 90° em pé sobre a lombada.
-    val lift = if (firstHalf) progress * 2f else (1f - progress) * 2f
-
-    Canvas(Modifier.fillMaxSize()) {
-        // Fundo: o lado de onde a folha sai já mostra a página nova; o outro, a antiga até ser coberto.
-        drawPage(after, leafFrom, leafFrom + 0.5f)
-        drawPage(before, leafTo, leafTo + 0.5f)
-        // Sombra da folha levantada sobre a página revelada, junto à lombada.
-        drawSpineShadow(sideStart = if (firstHalf) leafFrom else leafTo, lift = lift)
-    }
-
-    val face = if (firstHalf) before else after
-    val faceStart = if (firstHalf) leafFrom else leafTo
-    // A folha gira sobre a lombada: a borda presa fica no centro da tela.
-    val pivotX = if (faceStart == 0.5f) 0f else 1f
-    // Sinal escolhido para a borda solta vir na direção de quem lê, e não afundar na tela.
-    val direction = if (faceStart == 0.5f) -1f else 1f
-    Leaf(
-        page = face,
-        start = faceStart,
-        rotationY = direction * lift * 90f,
-        pivotX = pivotX,
-        shade = lift,
-    )
-}
-
-/** Uma página só: a folha gira presa à borda esquerda, como num caderno. */
-@Composable
-private fun SingleFlip(before: ImageBitmap, after: ImageBitmap, progress: Float, forward: Boolean) {
-    // Avançando, a página atual sai girando; voltando, a anterior entra girando por cima.
-    val under = if (forward) after else before
-    val leaf = if (forward) before else after
-    val lift = if (forward) progress else 1f - progress
-    Canvas(Modifier.fillMaxSize()) { drawPage(under, 0f, 1f) }
-    // Para dentro da tela: girando em direção ao leitor, a perspectiva ampliaria a página até
-    // cobrir a seguinte; assim ela recua para a borda e revela a próxima aos poucos.
-    Leaf(page = leaf, start = 0f, width = 1f, rotationY = lift * 90f, pivotX = 0f, shade = lift)
-}
-
-/**
- * Metade (ou página inteira) da foto, girada em 3D. [start] e [width] são frações da largura;
- * [shade] de 0 a 1 escurece a face conforme ela se afasta da luz.
- */
-@Composable
-private fun Leaf(page: ImageBitmap, start: Float, rotationY: Float, pivotX: Float, shade: Float, width: Float = 0.5f) {
-    Canvas(
-        Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                this.rotationY = rotationY
-                // Perspectiva suave: com a distância padrão a folha "explode" na direção da câmera.
-                cameraDistance = 24f * density
-                transformOrigin = TransformOrigin(start + pivotX * width, 0.5f)
-            },
-    ) {
-        drawPage(page, start, start + width)
-        val left = size.width * start
-        val pageWidth = size.width * width
-        // Escurece mais longe da lombada, onde a folha se curva em direção à luz.
-        val hinge = if (pivotX == 0f) left else left + pageWidth
-        val far = if (pivotX == 0f) left + pageWidth else left
-        drawRect(
-            Brush.horizontalGradient(
-                0f to Color.Black.copy(alpha = 0.10f * shade),
-                1f to Color.Black.copy(alpha = 0.38f * shade),
-                startX = hinge,
-                endX = far,
-            ),
-            topLeft = Offset(left, 0f),
-            size = Size(pageWidth, size.height),
-        )
-    }
-}
-
-/** Desenha a fatia [from, to) da foto (em frações da largura) na mesma posição da tela. */
-private fun DrawScope.drawPage(page: ImageBitmap, from: Float, to: Float) {
-    val srcX = (page.width * from).roundToInt()
-    val srcW = (page.width * to).roundToInt() - srcX
-    val dstX = (size.width * from).roundToInt()
-    val dstW = (size.width * to).roundToInt() - dstX
-    drawImage(
-        page,
-        srcOffset = IntOffset(srcX, 0),
-        srcSize = IntSize(srcW, page.height),
-        dstOffset = IntOffset(dstX, 0),
-        dstSize = IntSize(dstW, size.height.roundToInt()),
-    )
-}
-
-/**
- * Sombra junto à lombada sobre a metade que começa em [sideStart]. Mais larga e escura
- * quanto mais a folha estiver levantada ([lift]).
- */
-private fun DrawScope.drawSpineShadow(sideStart: Float, lift: Float) {
-    if (lift <= 0f) return
-    val spine = size.width / 2f
-    val reach = size.width / 2f * 0.35f * sin(lift * PI.toFloat() / 2f)
-    val alpha = 0.30f * cos((1f - lift) * PI.toFloat() / 2f)
-    val towardsRight = sideStart == 0.5f
-    val end = if (towardsRight) spine + reach else spine - reach
-    clipRect(left = minOf(spine, end), right = maxOf(spine, end)) {
-        drawRect(
-            Brush.horizontalGradient(
-                0f to Color.Black.copy(alpha = alpha),
-                1f to Color.Transparent,
-                startX = spine,
-                endX = end,
-            ),
-        )
     }
 }
 
