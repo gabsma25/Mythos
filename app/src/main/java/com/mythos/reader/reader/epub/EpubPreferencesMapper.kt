@@ -1,5 +1,6 @@
 package com.mythos.reader.reader.epub
 
+import android.content.res.Configuration
 import androidx.core.graphics.ColorUtils
 import com.mythos.reader.model.ReaderColumns
 import com.mythos.reader.model.ReaderPreferences
@@ -14,7 +15,25 @@ import org.readium.r2.navigator.preferences.Theme
 val ReaderPreferences.isDark: Boolean
     get() = ColorUtils.calculateLuminance(backgroundColor) < 0.4
 
-fun ReaderPreferences.toEpubPreferences(): EpubPreferences = EpubPreferences(
+/**
+ * Duas páginas lado a lado, como um livro aberto. No modo automático, só com a janela larga
+ * na horizontal (tela interna do Fold deitada); a externa deitada é estreita demais.
+ */
+fun ReaderPreferences.isBookSpread(configuration: Configuration): Boolean = when (columns) {
+    ReaderColumns.ONE -> false
+    ReaderColumns.TWO -> true
+    ReaderColumns.AUTO -> configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+        configuration.screenWidthDp >= BOOK_SPREAD_MIN_WIDTH_DP
+}
+
+/** Limite da classe de largura "expandida" do Material 3. */
+private const val BOOK_SPREAD_MIN_WIDTH_DP = 840
+
+/**
+ * @param spread resultado de [isBookSpread]; decidido aqui, e não pelo modo automático do
+ * Readium, para que a lombada desenhada pelo app coincida sempre com as colunas.
+ */
+fun ReaderPreferences.toEpubPreferences(spread: Boolean): EpubPreferences = EpubPreferences(
     fontFamily = font.cssName?.let(::FontFamily),
     fontSize = fontSize,
     lineHeight = lineHeight,
@@ -30,11 +49,7 @@ fun ReaderPreferences.toEpubPreferences(): EpubPreferences = EpubPreferences(
     theme = if (isDark) Theme.DARK else Theme.LIGHT,
     backgroundColor = Color(backgroundColor),
     textColor = Color(textColor),
-    columnCount = when (columns) {
-        ReaderColumns.AUTO -> ColumnCount.AUTO
-        ReaderColumns.ONE -> ColumnCount.ONE
-        ReaderColumns.TWO -> ColumnCount.TWO
-    },
+    columnCount = if (spread) ColumnCount.TWO else ColumnCount.ONE,
     // Sem isso o Readium ignora entrelinhas, espaçamentos e alinhamento escolhidos.
     publisherStyles = false,
     scroll = false,

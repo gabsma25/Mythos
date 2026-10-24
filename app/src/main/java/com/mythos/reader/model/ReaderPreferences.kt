@@ -18,7 +18,7 @@ data class ReaderPreferences(
     val customBackground: Int = 0xFFFBF8F1.toInt(),
     val customText: Int = 0xFF2B2B2B.toInt(),
     val columns: ReaderColumns = ReaderColumns.AUTO,
-    val animatedPageTurns: Boolean = true,
+    val pageTurn: ReaderPageTurn = ReaderPageTurn.FLIP,
     /** Liga o modo "Leitura Mythos" (Não Perturbe) enquanto um livro estiver aberto. */
     val doNotDisturb: Boolean = false,
     /** "Duo performático": mostra a capa do livro na tela externa enquanto se lê na interna. */
@@ -42,6 +42,10 @@ enum class ReaderFont(val label: String, val cssName: String?) {
 
 @Serializable
 enum class ReaderTextAlign(val label: String) { START("Esquerda"), JUSTIFY("Justificado") }
+
+/** Como a página vira ao tocar nas bordas ou deslizar o dedo. */
+@Serializable
+enum class ReaderPageTurn(val label: String) { FLIP("Folha"), SLIDE("Deslizar"), NONE("Nenhuma") }
 
 @Serializable
 enum class ReaderColumns(val label: String) { AUTO("Automático"), ONE("Uma"), TWO("Duas") }

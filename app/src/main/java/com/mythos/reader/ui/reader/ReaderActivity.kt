@@ -20,6 +20,7 @@ import com.mythos.reader.MainActivity
 import com.mythos.reader.appContainer
 import com.mythos.reader.reader.DuoDisplay
 import com.mythos.reader.reader.epub.EpubSession
+import com.mythos.reader.reader.epub.isBookSpread
 import com.mythos.reader.reader.epub.toEpubPreferences
 import com.mythos.reader.ui.highlights.copyToClipboard
 import com.mythos.reader.ui.highlights.shareText
@@ -31,10 +32,14 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
+import org.readium.r2.navigator.epub.css.ColCount
+import org.readium.r2.navigator.epub.css.Length
+import org.readium.r2.navigator.epub.css.RsProperties
 import org.readium.r2.shared.util.AbsoluteUrl
 
 class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
@@ -69,20 +74,29 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
 
         // A FragmentFactory precisa estar definida antes de super.onCreate, que pode
         // recriar o navegador ao dobrar/desdobrar o aparelho ou girar a tela.
+        val spread = viewModel.preferences.value.isBookSpread(resources.configuration)
         supportFragmentManager.fragmentFactory = session.navigatorFactory.createFragmentFactory(
             initialLocator = session.lastLocator,
-            initialPreferences = viewModel.preferences.value.toEpubPreferences(),
+            initialPreferences = viewModel.preferences.value.toEpubPreferences(spread),
             listener = this,
             // A área da câmera é respeitada em CSS (env(safe-area-inset-top)), para que só o
             // texto desvie dela e as ilustrações possam ocupar a tela inteira.
             configuration = EpubNavigatorFragment.Configuration(
                 shouldApplyInsetsPadding = false,
                 selectionActionModeCallback = selectionMenu,
+                // O ReadiumCSS só aceita duas colunas a partir de 960 dp, e a tela interna do Fold
+                // deitada tem 932: as colunas do livro aberto são impostas aqui, direto no CSS.
+                readiumCssRsProperties = if (spread) {
+                    RsProperties(colCount = ColCount.TWO, colWidth = Length.Em(SPREAD_MIN_COLUMN_EM))
+                } else {
+                    RsProperties()
+                },
             ),
         )
         super.onCreate(savedInstanceState)
 
         enterImmersiveMode()
+        recreateWhenSpreadChanges()
         followFocusModePreference()
         followDuoPreference()
 
@@ -90,6 +104,20 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
             MythosTheme {
                 ReaderScreen(viewModel = viewModel, onBack = ::finish)
             }
+        }
+    }
+
+    /**
+     * As colunas do livro aberto são fixadas ao criar o navegador. Girar ou dobrar o aparelho já
+     * recria a tela; mudar a opção "Colunas" nas configurações precisa recriá-la também.
+     */
+    private fun recreateWhenSpreadChanges() {
+        lifecycleScope.launch {
+            viewModel.preferences
+                .map { it.isBookSpread(resources.configuration) }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { recreate() }
         }
     }
 
@@ -155,6 +183,7 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
             menu.add(Menu.NONE, MENU_HIGHLIGHT, 0, "Destacar")
             menu.add(Menu.NONE, MENU_COPY, 1, android.R.string.copy)
             menu.add(Menu.NONE, MENU_SHARE, 2, "Compartilhar")
+            viewModel.selectionActive.value = true
             return true
         }
 
@@ -179,7 +208,9 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
             return true
         }
 
-        override fun onDestroyActionMode(mode: ActionMode) {}
+        override fun onDestroyActionMode(mode: ActionMode) {
+            viewModel.selectionActive.value = false
+        }
     }
 
     /** Oculta barras de sistema; um gesto na borda as revela temporariamente. */
@@ -203,6 +234,8 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
         private const val MENU_HIGHLIGHT = 1
         private const val MENU_COPY = 2
         private const val MENU_SHARE = 3
+        /** Largura mínima de cada página do livro aberto; abaixo disso volta a uma coluna. */
+        private const val SPREAD_MIN_COLUMN_EM = 20.0
 
         fun intent(context: Context, bookId: Long): Intent =
             Intent(context, ReaderActivity::class.java).putExtra(EXTRA_BOOK_ID, bookId)

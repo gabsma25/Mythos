@@ -34,6 +34,9 @@ class ReaderViewModel(
     /** Progresso total de 0 a 1, atualizado a cada página (exibido na tela externa pelo Duo). */
     val progression: StateFlow<Double> = _progression.asStateFlow()
 
+    /** Há texto selecionado: arrastes horizontais movem as alças da seleção, não viram a folha. */
+    val selectionActive = MutableStateFlow(false)
+
     /** Novos destaques usam a última cor escolhida. */
     private var lastColor = HighlightColor.YELLOW
 

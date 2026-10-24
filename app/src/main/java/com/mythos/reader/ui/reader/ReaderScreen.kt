@@ -41,6 +41,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -49,7 +51,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.fragment.compose.AndroidFragment
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
@@ -63,6 +67,9 @@ import com.mythos.reader.model.Highlight
 import com.mythos.reader.ui.highlights.HighlightEditor
 import com.mythos.reader.ui.highlights.HighlightItem
 import com.mythos.reader.ui.highlights.copyToClipboard
+import com.mythos.reader.model.ReaderPageTurn
+import com.mythos.reader.reader.epub.isBookSpread
+import com.mythos.reader.reader.epub.isDark
 import com.mythos.reader.reader.epub.toEpubPreferences
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.DecorableNavigator
@@ -70,10 +77,29 @@ import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.input.InputListener
 import org.readium.r2.navigator.input.TapEvent
+import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.navigator.util.DirectionalNavigationAdapter
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.services.locateProgression
+
+/** Mesmas faixas do [DirectionalNavigationAdapter]: 30% de cada borda, nunca menos que isto. */
+private val MIN_TAP_EDGE = 80.dp
+private const val TAP_EDGE_FRACTION = 0.3f
+
+/** Toques nas bordas viram a página como folha; o centro segue para os próximos ouvintes. */
+private fun flipTaps(nav: EpubNavigatorFragment, flip: PageFlipController, minEdgePx: Float) = object : InputListener {
+    override fun onTap(event: TapEvent): Boolean {
+        val width = nav.view?.width?.toFloat() ?: return false
+        val edge = maxOf(width * TAP_EDGE_FRACTION, minEdgePx)
+        when {
+            event.point.x < edge -> flip.turn(forward = false)
+            event.point.x > width - edge -> flip.turn(forward = true)
+            else -> return false
+        }
+        return true
+    }
+}
 
 private enum class ReaderSheet { NONE, SETTINGS, CONTENTS, HIGHLIGHTS }
 
@@ -111,9 +137,22 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
         navigator?.currentLocator?.collect(viewModel::onLocatorChanged)
     }
 
-    LaunchedEffect(navigator, preferences) {
-        navigator?.submitPreferences(preferences.toEpubPreferences())
+    // Fold aberto na horizontal: duas páginas lado a lado, como um livro.
+    val spread = preferences.isBookSpread(LocalConfiguration.current)
+
+    LaunchedEffect(navigator, preferences, spread) {
+        navigator?.submitPreferences(preferences.toEpubPreferences(spread))
     }
+
+    val pageFlip = remember { PageFlipController(scope) { navigator } }
+    SideEffect { pageFlip.spread = spread }
+    DisposableEffect(Unit) { onDispose { pageFlip.dispose() } }
+    // Livros da direita para a esquerda continuam com o deslizamento do Readium.
+    val flipPages = preferences.pageTurn == ReaderPageTurn.FLIP &&
+        navigator?.overflow?.value?.readingProgression != ReadingProgression.RTL
+    val selecting by viewModel.selectionActive.collectAsStateWithLifecycle()
+    val canDragFlip by rememberUpdatedState(flipPages && !selecting)
+    val minEdgePx = with(LocalDensity.current) { MIN_TAP_EDGE.toPx() }
 
     // O Readium compara com a lista anterior e redesenha só o que mudou.
     LaunchedEffect(navigator, highlights) {
@@ -144,7 +183,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
 
     // Toques: bordas viram a página, o centro mostra ou oculta os controles.
     // Com os controles visíveis, qualquer toque no texto apenas os oculta.
-    DisposableEffect(navigator, preferences.animatedPageTurns) {
+    DisposableEffect(navigator, preferences.pageTurn, flipPages) {
         val nav = navigator ?: return@DisposableEffect onDispose { }
         val dismissControls = object : InputListener {
             override fun onTap(event: TapEvent): Boolean {
@@ -153,7 +192,11 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
                 return true
             }
         }
-        val pageTurns = DirectionalNavigationAdapter(nav, animatedTransition = preferences.animatedPageTurns)
+        val pageTurns = if (flipPages) {
+            flipTaps(nav, pageFlip, minEdgePx)
+        } else {
+            DirectionalNavigationAdapter(nav, animatedTransition = preferences.pageTurn == ReaderPageTurn.SLIDE)
+        }
         val toggleControls = object : InputListener {
             override fun onTap(event: TapEvent): Boolean {
                 controlsVisible = true
@@ -169,7 +212,12 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     BackHandler(enabled = controlsVisible) { controlsVisible = false }
 
     Box(Modifier.fillMaxSize().background(Color(preferences.backgroundColor))) {
-        AndroidFragment<EpubNavigatorFragment>(Modifier.fillMaxSize()) { navigator = it }
+        AndroidFragment<EpubNavigatorFragment>(
+            Modifier.fillMaxSize().pageFlipGestures(pageFlip) { canDragFlip },
+        ) { navigator = it }
+        PageFlipOverlay(pageFlip)
+        // Por cima da folha: a lombada continua no lugar enquanto a página vira.
+        if (spread) BookSpine(dark = preferences.isDark)
 
         AnimatedVisibility(
             visible = controlsVisible,

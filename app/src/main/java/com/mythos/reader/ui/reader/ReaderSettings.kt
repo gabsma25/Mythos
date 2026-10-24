@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.mythos.reader.model.ReaderColumns
 import com.mythos.reader.model.ReaderFont
+import com.mythos.reader.model.ReaderPageTurn
 import com.mythos.reader.model.ReaderPreferences
 import com.mythos.reader.model.ReaderTextAlign
 import com.mythos.reader.model.ReaderTheme
@@ -146,18 +147,22 @@ fun ReaderSettings(
                 onChange { it.copy(columns = value) }
             }
             Text(
-                "No modo automático, a tela interna do Fold usa duas colunas quando está na horizontal.",
+                "No modo automático, o Fold aberto na horizontal mostra duas páginas lado a lado, como um livro.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 6.dp),
             )
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Animação ao virar a página", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-            Switch(
-                checked = preferences.animatedPageTurns,
-                onCheckedChange = { checked -> onChange { it.copy(animatedPageTurns = checked) } },
+        Section("Virar a página") {
+            Segmented(ReaderPageTurn.entries, preferences.pageTurn, { it.label }) { value ->
+                onChange { it.copy(pageTurn = value) }
+            }
+            Text(
+                "Folha: a página vira como papel e acompanha o dedo ao deslizar.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp),
             )
         }
 
