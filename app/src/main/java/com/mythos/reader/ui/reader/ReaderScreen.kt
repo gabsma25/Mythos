@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.systemGestureExclusion
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -101,6 +103,21 @@ private fun flipTaps(nav: EpubNavigatorFragment, flip: PageFlipController, minEd
     }
 }
 
+/**
+ * Pede ao sistema que deixe as bordas laterais com o leitor. Com as barras ocultas, um arraste
+ * que começa colado na borda era tratado como gesto do sistema e fazia a barra de status aparecer
+ * no meio da leitura. Com as barras ocultas o Android aceita a borda inteira (fora disso, só
+ * 200 dp por borda). Em troca, deslizar da lateral vira a página em vez de acionar o "voltar".
+ */
+private fun Modifier.readerEdgeGestureExclusion(stripPx: Float): Modifier = this
+    .systemGestureExclusion { Rect(0f, 0f, stripPx, it.size.height.toFloat()) }
+    .systemGestureExclusion {
+        val width = it.size.width.toFloat()
+        Rect(width - stripPx, 0f, width, it.size.height.toFloat())
+    }
+
+private val EDGE_EXCLUSION_WIDTH = 48.dp
+
 private enum class ReaderSheet { NONE, SETTINGS, CONTENTS, HIGHLIGHTS }
 
 private const val HIGHLIGHT_GROUP = "highlights"
@@ -157,6 +174,7 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     val selecting by viewModel.selectionActive.collectAsStateWithLifecycle()
     val canDragFlip by rememberUpdatedState(flipPages && !selecting)
     val minEdgePx = with(LocalDensity.current) { MIN_TAP_EDGE.toPx() }
+    val edgeStripPx = with(LocalDensity.current) { EDGE_EXCLUSION_WIDTH.toPx() }
 
     // O Readium compara com a lista anterior e redesenha só o que mudou.
     LaunchedEffect(navigator, highlights) {
@@ -214,10 +232,14 @@ fun ReaderScreen(viewModel: ReaderViewModel, onBack: () -> Unit) {
     }
 
     BackHandler(enabled = controlsVisible) { controlsVisible = false }
+    // O menu de seleção do Readium é flutuante e não trata o Voltar: sem isto, ele fecharia o livro.
+    BackHandler(enabled = selecting) { navigator?.clearSelection() }
 
     Box(Modifier.fillMaxSize().background(Color(preferences.backgroundColor))) {
         AndroidFragment<EpubNavigatorFragment>(
-            Modifier.fillMaxSize().pageFlipGestures(pageFlip) { canDragFlip },
+            Modifier.fillMaxSize()
+                .readerEdgeGestureExclusion(edgeStripPx)
+                .pageFlipGestures(pageFlip) { canDragFlip },
         ) { navigator = it }
         if (spread) BookSpine(dark = preferences.isDark)
         // Por cima da lombada: durante a virada, a cobertura desenha a própria lombada sob a

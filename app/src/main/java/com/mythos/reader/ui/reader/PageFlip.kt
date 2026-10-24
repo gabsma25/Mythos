@@ -214,8 +214,10 @@ class PageFlipController(
 }
 
 /**
- * Captura arrastes horizontais antes do WebView para que a folha siga o dedo. Toques, arrastes
- * verticais e pressionar-e-arrastar (seleção de texto) continuam com o Readium.
+ * Captura os arrastes antes do WebView para que a folha siga o dedo. No modo Folha nenhum
+ * arraste chega ao Readium, senão ele vira a página deslizando: os horizontais viram a folha e
+ * os demais são ignorados (no modo paginado não há rolagem vertical). Toques continuam com o
+ * Readium, e a seleção de texto também, quando [enabled] fica falso.
  */
 fun Modifier.pageFlipGestures(controller: PageFlipController, enabled: () -> Boolean): Modifier =
     pointerInput(controller) {
@@ -232,6 +234,8 @@ fun Modifier.pageFlipGestures(controller: PageFlipController, enabled: () -> Boo
             }
             val velocity = VelocityTracker().apply { addPosition(down.uptimeMillis, down.position) }
             var dragging = false
+            // Passou do limiar de toque sem ser uma virada: engolido até o dedo sair.
+            var swallowing = false
             while (true) {
                 val event = awaitPointerEvent(PointerEventPass.Initial)
                 if (event.changes.size > 1) {
@@ -248,23 +252,20 @@ fun Modifier.pageFlipGestures(controller: PageFlipController, enabled: () -> Boo
                     }
                     return@awaitEachGesture
                 }
-                if (!dragging) {
-                    // Segurar antes de mover é seleção de texto; não é virada de página.
-                    if (change.uptimeMillis - down.uptimeMillis > viewConfiguration.longPressTimeoutMillis) {
-                        return@awaitEachGesture
-                    }
+                // Segurar o dedo seleciona texto: com a seleção aberta, o arraste é das alças dela.
+                if (!dragging && !enabled()) return@awaitEachGesture
+                if (!dragging && !swallowing) {
                     val slop = viewConfiguration.touchSlop
-                    if (abs(delta.y) > slop && abs(delta.y) > abs(delta.x)) return@awaitEachGesture
-                    if (abs(delta.x) > slop && abs(delta.x) > abs(delta.y) * 1.5f) {
+                    if (abs(delta.x) > slop && abs(delta.x) >= abs(delta.y)) {
                         dragging = true
                         controller.startDrag(forward = delta.x < 0, width = size.width.toFloat())
+                    } else if (abs(delta.y) > slop) {
+                        swallowing = true
                     }
                 }
-                if (dragging) {
-                    // Consumir faz o Compose enviar ACTION_CANCEL ao WebView, que desiste do gesto.
-                    change.consume()
-                    controller.drag(delta.x)
-                }
+                // Consumir faz o Compose enviar ACTION_CANCEL ao WebView, que desiste do gesto.
+                if (dragging || swallowing) change.consume()
+                if (dragging) controller.drag(delta.x)
             }
         }
     }
