@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.mythos.reader.MainActivity
 import com.mythos.reader.appContainer
+import com.mythos.reader.reader.DuoDisplay
 import com.mythos.reader.reader.epub.EpubSession
 import com.mythos.reader.reader.epub.toEpubPreferences
 import com.mythos.reader.ui.highlights.copyToClipboard
@@ -26,6 +27,9 @@ import com.mythos.reader.ui.theme.MythosTheme
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -80,6 +84,7 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
 
         enterImmersiveMode()
         followFocusModePreference()
+        followDuoPreference()
 
         setContent {
             MythosTheme {
@@ -105,6 +110,28 @@ class ReaderActivity : AppCompatActivity(), EpubNavigatorFragment.Listener {
                 } finally {
                     focusMode.deactivate()
                 }
+            }
+        }
+    }
+
+    /**
+     * Duo performático: com o Fold aberto, a capa do livro fica na tela externa. Como o modo
+     * de leitura, só vale com o leitor visível; ao sair do livro a tela externa se apaga.
+     */
+    private fun followDuoPreference() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.preferences
+                    .map { it.duoCover }
+                    .distinctUntilChanged()
+                    .collectLatest { enabled ->
+                        if (enabled) {
+                            DuoDisplay.present(this@ReaderActivity) {
+                                val progression by viewModel.progression.collectAsStateWithLifecycle()
+                                MythosTheme { DuoCover(session.book, progression) }
+                            }
+                        }
+                    }
             }
         }
     }

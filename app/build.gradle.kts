@@ -66,6 +66,8 @@ dependencies {
     implementation(libs.androidx.fragment.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    // Duo performático: capa do livro na tela externa do Fold enquanto se lê na interna.
+    implementation(libs.androidx.window)
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

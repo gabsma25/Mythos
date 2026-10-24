@@ -21,6 +21,8 @@ data class ReaderPreferences(
     val animatedPageTurns: Boolean = true,
     /** Liga o modo "Leitura Mythos" (Não Perturbe) enquanto um livro estiver aberto. */
     val doNotDisturb: Boolean = false,
+    /** "Duo performático": mostra a capa do livro na tela externa enquanto se lê na interna. */
+    val duoCover: Boolean = false,
 ) {
     val backgroundColor: Int get() = if (theme == ReaderTheme.CUSTOM) customBackground else theme.background
     val textColor: Int get() = if (theme == ReaderTheme.CUSTOM) customText else theme.text

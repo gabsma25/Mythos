@@ -191,6 +191,22 @@ fun ReaderSettings(
                 )
             }
         }
+
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Duo performático", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                Switch(
+                    checked = preferences.duoCover,
+                    onCheckedChange = { checked -> onChange { it.copy(duoCover = checked) } },
+                )
+            }
+            Text(
+                "Com o Fold aberto, mostra a capa do livro na tela externa enquanto você lê. " +
+                    "Ao fechar o aparelho ou sair do livro, a tela externa volta ao normal.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
